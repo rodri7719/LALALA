@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build && node copy-static.mjs",
+    "dev": "node sync-public.mjs && vite",
+    "build": "node sync-public.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
