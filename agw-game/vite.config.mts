@@ -1,11 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  // Servimos también los archivos estáticos (incluido game7.html) desde la carpeta padre
-  publicDir: "../",
+  publicDir: command === 'serve' ? "../" : false,
   server: {
     port: 5173
   }
-});
+}));
