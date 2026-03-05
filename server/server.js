@@ -272,6 +272,12 @@ function normNick(n) {
   return cleaned || null;
 }
 
+function normAddress(a) {
+  const s = String(a || '').trim().toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(s)) return null;
+  return s;
+}
+
 function getNick(address) {
   if (!address) return null;
   return nicks.get(address) || null;
@@ -512,8 +518,16 @@ wss.on('connection', (socket, req) => {
 
       switch (msg.type) {
         case 'register':
-          client.address = String(msg.address || '').toLowerCase();
-          client.game = String(msg.game || client.game || 'hub');
+          {
+            const addr = normAddress(msg.address);
+            if (!addr) {
+              console.log('[REGISTER] invalid address payload', { raw: msg.address, ip: client.ip, id: client.id });
+              broadcast(socket, 'register_error', { reason: 'invalid_address' });
+              return;
+            }
+            client.address = addr;
+            client.game = String(msg.game || client.game || 'hub');
+          }
           {
             const nn = normNick(msg.nick);
             if (nn) nicks.set(client.address, nn);
@@ -523,10 +537,11 @@ wss.on('connection', (socket, req) => {
           // This prevents stale/busy ghost sessions that make challenges fail.
           for (const [s, c] of clients.entries()) {
             if (s === socket) continue;
-            if (!c?.address) continue;
-            if (String(c.address).toLowerCase() !== client.address) continue;
+            const otherAddr = normAddress(c?.address);
+            if (!otherAddr) continue;
+            if (otherAddr !== client.address) continue;
             try {
-              console.log(`[DEDUP] Closing previous socket for ${client.address} (id=${c.id})`);
+              console.log(`[DEDUP] Closing previous socket for ${client.address} (prevId=${c.id}, newId=${client.id})`);
               s.close(4000, 'dedup_same_wallet');
             } catch (e) {}
           }
