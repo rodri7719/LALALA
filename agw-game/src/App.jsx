@@ -311,6 +311,7 @@ export default function App() {
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [nickModalOpen, setNickModalOpen] = useState(false);
   const [preGame, setPreGame] = useState(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   const menuMusicRef = useRef(null);
   const menuMusicStartedRef = useRef(false);
@@ -462,6 +463,10 @@ export default function App() {
       setMenuMusicPausedForGame(false);
     }
   }, [currentGame]);
+
+  useEffect(() => {
+    setIframeLoaded(false);
+  }, [currentGame?.src]);
 
   useEffect(() => {
     if (currentGame) return;
@@ -1038,7 +1043,7 @@ export default function App() {
   // ════════════ GAME VIEW ════════════
   if (currentGame) {
     return (
-      <div style={{ position:"fixed", inset:0, background:"#000", zIndex:9999 }}>
+      <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#050a06" }}>
         {walletMenuOpen && WalletMenu}
         <Modal
           state={modal}
@@ -1057,11 +1062,40 @@ export default function App() {
           ← Back
         </button>
 
+        {!iframeLoaded && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9998,
+              background: 'radial-gradient(1200px 800px at 50% 35%, rgba(0,255,170,.12), rgba(0,0,0,.92) 70%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'opacity .18s ease',
+              opacity: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{
+              fontFamily:"'Baloo 2',cursive",
+              fontWeight: 900,
+              letterSpacing: '.12em',
+              color: 'rgba(255,255,255,.72)',
+              fontSize: '.95rem',
+              textTransform: 'uppercase',
+            }}>
+              Loading…
+            </div>
+          </div>
+        )}
+
         <iframe
           ref={iframeRef}
           src={currentGame.src}
-          style={{ width:"100%", height:"100%", border:"none" }}
+          style={{ width:"100%", height:"100dvh", border:"none", display:"block", background:"transparent" }}
           onLoad={() => {
+            setIframeLoaded(true);
             if (address) setTimeout(() =>
               iframeRef.current?.contentWindow?.postMessage({ type:"AGW_SET_PLAYER", address, nick: vs.nick }, "*")
             , 500);
