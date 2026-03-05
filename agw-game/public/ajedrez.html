@@ -44,19 +44,6 @@ body {
   align-items: center;
 }
 
-@media (max-width: 820px){
-  html, body{overflow:hidden;overscroll-behavior:none;}
-  body{position:fixed;inset:0;width:100%;}
-  #s-game{height:100dvh;padding:10px 10px 12px;overflow:hidden;}
-  .g-header{margin-bottom:10px;}
-  .arena{flex-direction:column;gap:10px;max-width:100%;}
-  #board{width:min(92vw, 92dvw) !important;touch-action:none;}
-  .chat-side{width:100%;max-width:560px;height:170px;}
-  .panel{width:100%;max-width:560px;flex-direction:row;flex-wrap:wrap;gap:10px;}
-  .pcard{flex:1 1 250px;min-width:0;}
-  #move-log{max-height:90px;}
-}
-
 /* ── BACKGROUND SCENE ── */
 #bg {
   position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
@@ -2142,10 +2129,6 @@ function startGameCore() {
   if (vsp) vsp.style.display = 'none';
   document.getElementById('s-diff').style.display = 'none';
   document.getElementById('s-game').style.display = 'flex';
-  try{
-    document.documentElement.style.overflow='hidden';
-    document.body.style.overflow='hidden';
-  }catch(e){}
   initGame();
   chatInit(_gameMode !== 'bot', _gameMode === 'bot' ? 'Bot' : (_vsMatch?.opponentNick ? _vsMatch.opponentNick : (_vsMatch?.opponent ? shortAddr(_vsMatch.opponent) : 'Player')));
 }
@@ -2155,10 +2138,6 @@ function goMenu() {
   teardown();
   document.getElementById('s-game').style.display = 'none';
   document.getElementById('s-diff').style.display  = 'flex';
-  try{
-    document.documentElement.style.overflow='';
-    document.body.style.overflow='';
-  }catch(e){}
 }
 
 function teardown() {

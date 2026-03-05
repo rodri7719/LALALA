@@ -22,7 +22,7 @@
 body{background:var(--dark);font-family:'Barlow Condensed',sans-serif;overflow:hidden;user-select:none;height:100vh;display:flex;flex-direction:column;}
 
 /* Mobile fit-to-screen (iOS landscape) */
-#fitRoot{transform-origin:top left;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;}
+#fitRoot{transform-origin:top left;}
 
 /* Mobile: require landscape for playable layout */
 #rotMsg{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
@@ -376,8 +376,6 @@ body.rain #railTop, body.rain #railBottom{filter:brightness(0.96) saturate(0.9);
   </div>
 </div>
 
-<div id="fitRoot">
-
 <div id="hdr">
   <div class="logo"><span class="lico">🏇</span><img id="absLogo" class="alogo" alt="" /><span>ABSTRACT DERBY</span></div>
   <div class="hdrMid">
@@ -456,8 +454,6 @@ body.rain #railTop, body.rain #railBottom{filter:brightness(0.96) saturate(0.9);
     <div class="paysm" id="rsub"></div>
     <button id="nxtBtn" onclick="nextRace()">▶ NEXT RACE</button>
   </div>
-</div>
-
 </div>
 
 </div>

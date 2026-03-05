@@ -7,7 +7,7 @@
 // 3. useSendTransaction (wagmi) → to send transactions from AGW wallet
 // 4. AbstractWalletProvider handles WagmiProvider + QueryClientProvider internally
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useLoginWithAbstract } from "@abstract-foundation/agw-react";
 import { useAccount, useDisconnect, useSendTransaction } from "wagmi";
 import { parseEther, encodeFunctionData } from "viem";
@@ -312,7 +312,6 @@ export default function App() {
   const [nickModalOpen, setNickModalOpen] = useState(false);
   const [preGame, setPreGame] = useState(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeVer, setIframeVer] = useState(0);
 
   const menuMusicRef = useRef(null);
   const menuMusicStartedRef = useRef(false);
@@ -467,14 +466,7 @@ export default function App() {
 
   useEffect(() => {
     setIframeLoaded(false);
-    setIframeVer(v => (v + 1) % 1000000);
   }, [currentGame?.src]);
-
-  const iframeSrc = useMemo(() => {
-    if (!currentGame?.src) return '';
-    const sep = String(currentGame.src).includes('?') ? '&' : '?';
-    return `${currentGame.src}${sep}v=${iframeVer}`;
-  }, [currentGame?.src, iframeVer]);
 
   useEffect(() => {
     if (currentGame) return;
@@ -1100,7 +1092,7 @@ export default function App() {
 
         <iframe
           ref={iframeRef}
-          src={iframeSrc}
+          src={currentGame.src}
           style={{ width:"100%", height:"100dvh", border:"none", display:"block", background:"transparent" }}
           onLoad={() => {
             setIframeLoaded(true);
