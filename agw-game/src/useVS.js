@@ -31,6 +31,7 @@ export function useVS(address) {
   const [lastChallengeInvite, setLastChallengeInvite] = useState(null); // { from, fromNick }
   const [lastChallengeEvent, setLastChallengeEvent] = useState(null); // { type, ...payload }
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState(null); // { weeklyKey, top }
+  const [lastPaymentRejected, setLastPaymentRejected] = useState(null); // { roomId, reason, ts }
   const [nick, setNick] = useState(() => {
     try { return localStorage.getItem('pudgy_nick') || ''; } catch (e) { return ''; }
   });
@@ -121,6 +122,9 @@ export function useVS(address) {
               break;
             case 'payment_update':
               setMatchData(prev => prev ? ({ ...prev, p1Paid: msg.p1Paid, p2Paid: msg.p2Paid, paid: msg.paid, paidBy: msg.paidBy }) : prev);
+              break;
+            case 'payment_rejected':
+              setLastPaymentRejected({ roomId: msg.roomId || null, reason: msg.reason || 'rejected', ts: Date.now() });
               break;
             case 'game_start':
               setVsState('playing');
@@ -238,9 +242,13 @@ export function useVS(address) {
     }
   };
 
-  const confirmPayment = () => {
+  const confirmPayment = (txHash) => {
     if (wsRef.current && wsRef.current.readyState === 1) {
-      wsRef.current.send(JSON.stringify({ type: 'payment_confirmed', roomId: matchData?.roomId || null }));
+      wsRef.current.send(JSON.stringify({
+        type: 'payment_confirmed',
+        roomId: matchData?.roomId || null,
+        txHash: txHash || null,
+      }));
     }
   };
 
@@ -325,6 +333,7 @@ export function useVS(address) {
     lastChallengeInvite,
     lastChallengeEvent,
     weeklyLeaderboard,
+    lastPaymentRejected,
     nick,
     findMatch,
     cancelFind,

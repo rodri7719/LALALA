@@ -337,6 +337,7 @@ export default function App() {
   const vsBridgeRef = useRef({ win: null, gameId: null });
   const iframeRef                     = useRef(null);
   const pendingGame                   = useRef(null); // game to launch after wallet connects
+  const lastPaymentTxHashRef          = useRef(null);
 
   const [weeklyLocalVer, setWeeklyLocalVer] = useState(0);
 
@@ -727,10 +728,12 @@ export default function App() {
         sendTransaction(
           { to: ARCADE_CONTRACT, value: FEE_PER_GAME, data },
           {
-            onSuccess: () => {
+            onSuccess: (hash) => {
+              lastPaymentTxHashRef.current = typeof hash === 'string' ? hash : (hash?.hash || null);
               iframeRef.current?.contentWindow?.postMessage({ type:"AGW_START_GAME" }, "*");
             },
             onError: (err) => {
+              lastPaymentTxHashRef.current = null;
               const msg = err?.shortMessage || err?.message || "Rejected";
               iframeRef.current?.contentWindow?.postMessage({ type:"AGW_TX_ERROR", msg }, "*");
             },
@@ -761,7 +764,9 @@ export default function App() {
       }
 
       if (e.data?.type === "VS_CONFIRM_PAYMENT") {
-        vs.confirmPayment();
+        const txHash = lastPaymentTxHashRef.current;
+        vs.confirmPayment(txHash);
+        lastPaymentTxHashRef.current = null;
       }
 
       if (e.data?.type === "VS_CHESS_MOVE") {

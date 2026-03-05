@@ -4,7 +4,134 @@ import fs from 'fs';
 import path from 'path';
 
 const PORT = Number(process.env.PORT || 8787);
+const ALLOWED_ORIGINS = String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const TRUST_PROXY = String(process.env.TRUST_PROXY || '').toLowerCase() === 'true';
+
+function setSecurityHeaders(res) {
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('referrer-policy', 'no-referrer');
+  res.setHeader('permissions-policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('cross-origin-opener-policy', 'same-origin');
+  res.setHeader('cross-origin-resource-policy', 'same-site');
+  res.setHeader('cross-origin-embedder-policy', 'credentialless');
+  res.setHeader('x-frame-options', 'DENY');
+  res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+
+  // Enable HSTS only when you're sure traffic is HTTPS at the edge.
+  if (String(process.env.ENABLE_HSTS || '').toLowerCase() === 'true') {
+    res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+  }
+}
+
+function getReqIp(req) {
+  if (TRUST_PROXY) {
+    const xff = String(req.headers['x-forwarded-for'] || '');
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket?.remoteAddress || 'unknown';
+}
+
+function isOriginAllowed(origin) {
+  if (!ALLOWED_ORIGINS.length) return true;
+  const o = String(origin || '').trim();
+  if (!o) return false;
+  return ALLOWED_ORIGINS.includes(o);
+}
+
+const wsConnCountByIp = new Map();
+const wsRateByIp = new Map();
+const WS_MAX_CONNECTIONS_PER_IP = Number(process.env.WS_MAX_CONNECTIONS_PER_IP || 6);
+const WS_MAX_MSG_BYTES = Number(process.env.WS_MAX_MSG_BYTES || 64 * 1024);
+const WS_RATE_WINDOW_MS = Number(process.env.WS_RATE_WINDOW_MS || 10_000);
+const WS_RATE_MAX_MSGS = Number(process.env.WS_RATE_MAX_MSGS || 120);
+
+const RPC_URL = String(process.env.RPC_URL || '').trim();
+const ARCADE_CONTRACT = String(process.env.ARCADE_CONTRACT || '0x024d05570022e4b82B8Efe49c3fEF935F94b7d38').toLowerCase();
+const FEE_WEI_MIN = BigInt(process.env.FEE_WEI_MIN || '10000000000000'); // 0.00001 ETH
+const usedTx = new Map(); // txHash -> { address, usedAt }
+
+async function rpc(method, params) {
+  if (!RPC_URL) throw new Error('RPC_URL not configured');
+  const body = { jsonrpc: '2.0', id: 1, method, params };
+  const r = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`RPC ${method} failed: HTTP ${r.status}`);
+  const j = await r.json();
+  if (j?.error) throw new Error(`RPC ${method} error: ${j.error?.message || 'unknown'}`);
+  return j.result;
+}
+
+function hexToBigInt(v) {
+  const s = String(v || '0x0');
+  try { return BigInt(s); } catch { return 0n; }
+}
+
+async function verifyPaymentTx({ txHash, expectedFrom }) {
+  const h = String(txHash || '').toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(h)) return { ok: false, reason: 'bad_txhash' };
+
+  const prev = usedTx.get(h);
+  if (prev) return { ok: false, reason: 'tx_already_used' };
+
+  const tx = await rpc('eth_getTransactionByHash', [h]);
+  if (!tx) return { ok: false, reason: 'tx_not_found' };
+
+  const from = String(tx.from || '').toLowerCase();
+  const to = String(tx.to || '').toLowerCase();
+  if (!from || !to) return { ok: false, reason: 'tx_missing_fields' };
+  if (String(expectedFrom || '').toLowerCase() !== from) return { ok: false, reason: 'tx_from_mismatch' };
+  if (to !== ARCADE_CONTRACT) return { ok: false, reason: 'tx_to_mismatch' };
+
+  const value = hexToBigInt(tx.value);
+  if (value < FEE_WEI_MIN) return { ok: false, reason: 'tx_value_too_low' };
+
+  const receipt = await rpc('eth_getTransactionReceipt', [h]);
+  const status = String(receipt?.status || '').toLowerCase();
+  if (status !== '0x1') return { ok: false, reason: 'tx_failed' };
+
+  usedTx.set(h, { address: from, usedAt: Date.now() });
+  return { ok: true };
+}
+
+function wsConnInc(ip) {
+  const cur = wsConnCountByIp.get(ip) || 0;
+  wsConnCountByIp.set(ip, cur + 1);
+  return cur + 1;
+}
+
+function wsConnDec(ip) {
+  const cur = wsConnCountByIp.get(ip) || 0;
+  const next = Math.max(0, cur - 1);
+  if (next === 0) wsConnCountByIp.delete(ip);
+  else wsConnCountByIp.set(ip, next);
+}
+
+function wsRateAllow(ip) {
+  const now = Date.now();
+  const cur = wsRateByIp.get(ip);
+  if (!cur || now > cur.resetAt) {
+    wsRateByIp.set(ip, { count: 1, resetAt: now + WS_RATE_WINDOW_MS });
+    return true;
+  }
+  cur.count += 1;
+  if (cur.count > WS_RATE_MAX_MSGS) return false;
+  return true;
+}
+
 const server = http.createServer((req, res) => {
+  setSecurityHeaders(res);
+  if (ALLOWED_ORIGINS.length) {
+    const origin = String(req.headers.origin || '');
+    if (origin && isOriginAllowed(origin)) {
+      res.setHeader('access-control-allow-origin', origin);
+      res.setHeader('vary', 'origin');
+    }
+  }
+
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('ok');
@@ -328,12 +455,27 @@ function createDirectMatch(p1Socket, p2Socket) {
   return roomId;
 }
 
-wss.on('connection', (socket) => {
+wss.on('connection', (socket, req) => {
+  const ip = req ? getReqIp(req) : 'unknown';
+  const origin = req?.headers?.origin;
+  if (!isOriginAllowed(origin)) {
+    try { socket.close(); } catch (e) {}
+    return;
+  }
+
+  const nConns = wsConnInc(ip);
+  if (Number.isFinite(WS_MAX_CONNECTIONS_PER_IP) && nConns > WS_MAX_CONNECTIONS_PER_IP) {
+    wsConnDec(ip);
+    try { socket.close(); } catch (e) {}
+    return;
+  }
+
   const clientId = Math.random().toString(36).slice(2);
 
   clients.set(socket, {
     id: clientId,
     address: null,
+    ip,
     state: 'idle',
     room: null,
     lastPing: Date.now(),
@@ -344,8 +486,19 @@ wss.on('connection', (socket) => {
   broadcast(socket, 'connected', { id: clientId });
   broadcastStats();
 
-  socket.on('message', (raw) => {
+  socket.on('message', async (raw) => {
     try {
+      const b = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ''));
+      if (b.length > WS_MAX_MSG_BYTES) {
+        try { socket.close(); } catch (e) {}
+        return;
+      }
+
+      if (!wsRateAllow(ip)) {
+        try { socket.close(); } catch (e) {}
+        return;
+      }
+
       const msg = JSON.parse(raw.toString());
       const client = clients.get(socket);
       if (!client) return;
@@ -527,6 +680,23 @@ wss.on('connection', (socket) => {
             const room = rooms.get(roomId);
             if (!room) return;
 
+            const txHash = String(msg.txHash || '').trim();
+            if (!txHash) {
+              broadcast(socket, 'payment_rejected', { roomId, reason: 'missing_txhash' });
+              return;
+            }
+
+            try {
+              const v = await verifyPaymentTx({ txHash, expectedFrom: client.address });
+              if (!v.ok) {
+                broadcast(socket, 'payment_rejected', { roomId, reason: v.reason });
+                return;
+              }
+            } catch (e) {
+              broadcast(socket, 'payment_rejected', { roomId, reason: 'rpc_verify_failed' });
+              return;
+            }
+
             // If we recovered the room by msg.roomId, re-associate this socket.
             if (!client.room) client.room = roomId;
             if (client.state === 'idle') client.state = 'matched';
@@ -663,6 +833,7 @@ wss.on('connection', (socket) => {
     }
 
     clients.delete(socket);
+    wsConnDec(ip);
     broadcastStats();
     broadcastLobbyUsers();
   });
