@@ -1546,6 +1546,48 @@ function randomizeOddsAndWinPct() {
     h.odds = Math.round(Math.max(minO, Math.min(maxO, noisy))*10)/10;
   });
 
+  // Post-process to avoid pathological duplicates (e.g. all equal after rounding)
+  // and avoid "everyone is max odds" situations.
+  const enforceSpread = () => {
+    // If too many odds are identical, nudge them by small steps.
+    const used = new Map();
+    const step = 0.1;
+    for (const h of HORSES) {
+      let o = Number(h.odds);
+      if (!Number.isFinite(o)) o = minO;
+
+      // Keep within bounds.
+      o = Math.max(minO, Math.min(maxO, o));
+
+      // Allow at most 2 horses with the same rounded odds.
+      let k = used.get(o) || 0;
+      while (k >= 2) {
+        // Nudge up or down depending on where we are in the range.
+        const dir = (o >= (minO + maxO) / 2) ? -1 : 1;
+        o = Math.round(Math.max(minO, Math.min(maxO, o + dir * step)) * 10) / 10;
+        k = used.get(o) || 0;
+      }
+      used.set(o, (used.get(o) || 0) + 1);
+      h.odds = o;
+    }
+
+    const uniq = new Set(HORSES.map(h => String(h.odds))).size;
+    if (uniq <= 2) {
+      // Force a guaranteed spread if rounding collapsed everything.
+      const ord = [...HORSES].sort((a,b)=>Number(a.odds)-Number(b.odds));
+      const lo = Math.max(minO, 1.3);
+      const hi = Math.min(maxO, regime === 'tight' ? 3.8 : (regime === 'mixed' ? 6.8 : 9.8));
+      const span = Math.max(step, hi - lo);
+      ord.forEach((h, idx) => {
+        const t = (ord.length <= 1) ? 0 : (idx / (ord.length - 1));
+        const v = lo + span * t;
+        h.odds = Math.round(v * 10) / 10;
+      });
+    }
+  };
+
+  enforceSpread();
+
   // Recompute implied win% from odds
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
   const t = w.reduce((a,b)=>a+b,0) || 1;

@@ -39,6 +39,20 @@ export function useVS(address) {
   const reconnectTimer = useRef(null);
   const activeRef = useRef(false);
 
+  const setGame = (game) => {
+    const g = String(game || 'hub');
+    gameRef.current = g;
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'set_game', game: g }));
+    }
+  };
+
+  const requestLobbyUsers = () => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'get_lobby_users' }));
+    }
+  };
+
   useEffect(() => {
     if (!address) {
       activeRef.current = false;
@@ -99,21 +113,6 @@ export function useVS(address) {
 
         socket._pingInterval = pingInterval;
       };
-
-  const setGame = (game) => {
-    const g = String(game || 'hub');
-    gameRef.current = g;
-    if (wsRef.current && wsRef.current.readyState === 1) {
-      wsRef.current.send(JSON.stringify({ type: 'set_game', game: g }));
-    }
-  };
-
-  const requestLobbyUsers = () => {
-    if (wsRef.current && wsRef.current.readyState === 1) {
-      wsRef.current.send(JSON.stringify({ type: 'get_lobby_users' }));
-    }
-  };
-
       socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
