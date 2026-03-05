@@ -774,6 +774,7 @@ wss.on('connection', (socket, req) => {
 
             const txHash = String(msg.txHash || '').trim();
             if (!txHash) {
+              console.log('[PAYMENT] rejected (missing txHash)', { roomId, from: client.address, id: client.id });
               broadcast(socket, 'payment_rejected', { roomId, reason: 'missing_txhash' });
               return;
             }
@@ -781,10 +782,12 @@ wss.on('connection', (socket, req) => {
             try {
               const v = await verifyPaymentTx({ txHash, expectedFrom: client.address });
               if (!v.ok) {
+                console.log('[PAYMENT] rejected (verify failed)', { roomId, from: client.address, id: client.id, reason: v.reason, txHash });
                 broadcast(socket, 'payment_rejected', { roomId, reason: v.reason });
                 return;
               }
             } catch (e) {
+              console.log('[PAYMENT] rejected (rpc verify exception)', { roomId, from: client.address, id: client.id, txHash, err: String(e?.message || e) });
               broadcast(socket, 'payment_rejected', { roomId, reason: 'rpc_verify_failed' });
               return;
             }
@@ -796,6 +799,16 @@ wss.on('connection', (socket, req) => {
             if (client.address === room.p1) room.p1Paid = true;
             if (client.address === room.p2) room.p2Paid = true;
 
+            console.log('[PAYMENT] confirmed', {
+              roomId,
+              from: client.address,
+              txHash,
+              p1: room.p1,
+              p2: room.p2,
+              p1Paid: room.p1Paid,
+              p2Paid: room.p2Paid,
+            });
+
             creditAdd(client.address, 1);
 
             broadcastToRoom(client.room, 'payment_update', {
@@ -805,7 +818,8 @@ wss.on('connection', (socket, req) => {
               paidBy: client.address,
             });
 
-            startRoomIfPaid(roomId);
+            const started = startRoomIfPaid(roomId);
+            console.log('[PAYMENT] startRoomIfPaid', { roomId, started, p1Paid: room.p1Paid, p2Paid: room.p2Paid, state: room.state });
           }
           break;
 

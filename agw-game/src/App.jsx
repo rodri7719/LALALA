@@ -746,6 +746,15 @@ export default function App() {
             onSuccess: (hash) => {
               lastPaymentTxHashRef.current = typeof hash === 'string' ? hash : (hash?.hash || null);
               iframeRef.current?.contentWindow?.postMessage({ type:"AGW_START_GAME" }, "*");
+
+              // If we're in Chess VS Player flow, confirm payment immediately so the server can start
+              // as soon as both players have paid (don't rely on iframe timing).
+              try {
+                const txHash = lastPaymentTxHashRef.current;
+                if (currentGame?.id === 'chess' && vs?.vsState === 'matched' && vs?.matchData?.roomId && txHash) {
+                  vs.confirmPayment(txHash);
+                }
+              } catch {}
             },
             onError: (err) => {
               lastPaymentTxHashRef.current = null;

@@ -20,6 +20,7 @@ export function useVS(address) {
   const loggedWsError = useRef(false);
   const lobbyPollRef = useRef(null);
   const lastSentGameRef = useRef(null);
+  const lastPaymentTxSentRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState({ online: 0, inQueue: 0, inMatches: 0 });
   const [vsState, setVsState] = useState('idle');
@@ -308,7 +309,10 @@ export function useVS(address) {
   };
 
   const confirmPayment = (txHash) => {
+    const h = (typeof txHash === 'string' ? txHash : (txHash?.hash || ''));
+    if (h && lastPaymentTxSentRef.current === h) return;
     if (wsRef.current && wsRef.current.readyState === 1) {
+      if (h) lastPaymentTxSentRef.current = h;
       wsRef.current.send(JSON.stringify({
         type: 'payment_confirmed',
         roomId: matchData?.roomId || null,
