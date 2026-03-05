@@ -218,6 +218,14 @@ export function useVS(address) {
         if (socket._pingInterval) clearInterval(socket._pingInterval);
         if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
         lobbyPollRef.current = null;
+
+        // If the server intentionally deduped this wallet session, do NOT reconnect.
+        // Reconnecting here causes an infinite "socket fight" where tabs keep kicking each other.
+        if (ev?.code === 4000 || String(ev?.reason || '') === 'dedup_same_wallet') {
+          activeRef.current = false;
+          return;
+        }
+
         if (!activeRef.current) return;
         failedReconnects.current = (failedReconnects.current || 0) + 1;
         reconnectTimer.current = setTimeout(() => {

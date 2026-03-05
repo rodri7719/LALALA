@@ -322,6 +322,33 @@ function cleanupRoom(roomId) {
   broadcastStats();
 }
 
+function startRoomIfPaid(roomId) {
+  const room = rooms.get(roomId);
+  if (!room) return false;
+  if (room.state === 'playing') return true;
+  if (!room.p1Paid || !room.p2Paid) return false;
+
+  room.state = 'playing';
+  room.startTime = Date.now();
+
+  const p1Socket = getSocketByAddress(room.p1);
+  const p2Socket = getSocketByAddress(room.p2);
+  if (p1Socket) {
+    const c = clients.get(p1Socket);
+    if (c) c.state = 'playing';
+  }
+  if (p2Socket) {
+    const c = clients.get(p2Socket);
+    if (c) c.state = 'playing';
+  }
+
+  creditAdd(room.p1, -1);
+  creditAdd(room.p2, -1);
+
+  broadcastToRoom(roomId, 'game_start', { seed: room.seed, countdown: 3 });
+  return true;
+}
+
 function getStats() {
   const online = clients.size;
   const inQueue = queue.size;
@@ -398,6 +425,9 @@ function tryMatchmaking() {
     });
   }
 
+  // If both already have credits, start immediately without asking for a new tx.
+  startRoomIfPaid(roomId);
+
   broadcastStats();
 }
 
@@ -456,6 +486,9 @@ function createDirectMatch(p1Socket, p2Socket) {
       creditInfo: true,
     });
   }
+
+  // If both already have credits, start immediately without asking for a new tx.
+  startRoomIfPaid(roomId);
 
   broadcastStats();
   return roomId;
@@ -748,22 +781,7 @@ wss.on('connection', (socket, req) => {
               paidBy: client.address,
             });
 
-            if (room.p1Paid && room.p2Paid) {
-              room.state = 'playing';
-              room.startTime = Date.now();
-              const p1Socket = getSocketByAddress(room.p1);
-              const p2Socket = getSocketByAddress(room.p2);
-              if (p1Socket) clients.get(p1Socket).state = 'playing';
-              if (p2Socket) clients.get(p2Socket).state = 'playing';
-
-              creditAdd(room.p1, -1);
-              creditAdd(room.p2, -1);
-
-              broadcastToRoom(client.room, 'game_start', {
-                seed: room.seed,
-                countdown: 3,
-              });
-            }
+            startRoomIfPaid(roomId);
           }
           break;
 
