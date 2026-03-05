@@ -558,6 +558,9 @@ export default function App() {
       setPreGame(game);
       return;
     }
+    try {
+      if (game?.id) vs.setGame(String(game.id));
+    } catch {}
     setCurrentGame(game);
   }, [isConnected, login, ensureMenuMusic]);
 
@@ -565,15 +568,6 @@ export default function App() {
     if (!isConnected || !address) return;
     const g = currentGame?.id ? String(currentGame.id) : 'hub';
     try { vs.setGame(g); } catch {}
-  }, [isConnected, address, currentGame?.id]);
-
-  useEffect(() => {
-    if (!isConnected || !address) return;
-    if (currentGame?.id !== 'chess') return;
-    const t = setInterval(() => {
-      try { vs.requestLobbyUsers(); } catch {}
-    }, 5000);
-    return () => clearInterval(t);
   }, [isConnected, address, currentGame?.id]);
 
   // ── Auto-enter after wallet connects ──
@@ -901,10 +895,7 @@ export default function App() {
     const win = vsBridgeRef.current?.win;
     if (!win) return;
     const users = Array.isArray(vs.lobbyUsers) ? vs.lobbyUsers : [];
-    const filtered = currentGame?.id === 'chess'
-      ? users.filter(u => String(u?.game || '').toLowerCase() === 'chess')
-      : users;
-    win.postMessage({ type: "LOBBY_USERS", users: filtered }, "*");
+    win.postMessage({ type: "LOBBY_USERS", users }, "*");
   }, [vs.lobbyUsers, currentGame?.id, iframeLoaded]);
 
   useEffect(() => {
@@ -1134,12 +1125,12 @@ export default function App() {
 
             const win = iframeRef.current?.contentWindow;
             if (win) {
-              try { vs.requestLobbyUsers(); } catch {}
+              try {
+                if (currentGame?.id) vs.setGame(String(currentGame.id));
+                vs.requestLobbyUsers();
+              } catch {}
               const users = Array.isArray(vs.lobbyUsers) ? vs.lobbyUsers : [];
-              const filtered = currentGame?.id === 'chess'
-                ? users.filter(u => String(u?.game || '').toLowerCase() === 'chess')
-                : users;
-              win.postMessage({ type: "LOBBY_USERS", users: filtered }, "*");
+              win.postMessage({ type: "LOBBY_USERS", users }, "*");
             }
           }}
         />
