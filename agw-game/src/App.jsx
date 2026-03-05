@@ -408,6 +408,12 @@ export default function App() {
         const src = (base.endsWith('/') ? base : (base + '/')) + 'PIOPIOPIO.mp3';
         const a = new Audio(src);
         a.loop = true;
+        a.onended = () => {
+          try {
+            a.currentTime = 0;
+            a.play().catch(() => {});
+          } catch {}
+        };
         a.preload = 'auto';
         a.volume = menuMusicVol;
         a.muted = !!menuMusicMuted;

@@ -853,6 +853,10 @@ setInterval(() => {
 }, 10000);
 
 setInterval(() => {
+  broadcastLobbyUsers();
+}, 5000);
+
+setInterval(() => {
   const now = Date.now();
   for (const [roomId, room] of rooms.entries()) {
     if (room.state !== 'waiting_payment') continue;
