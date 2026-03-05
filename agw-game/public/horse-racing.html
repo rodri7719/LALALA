@@ -21,6 +21,19 @@
 }
 body{background:var(--dark);font-family:'Barlow Condensed',sans-serif;overflow:hidden;user-select:none;height:100vh;display:flex;flex-direction:column;}
 
+/* Mobile: require landscape for playable layout */
+#rotMsg{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.92);backdrop-filter:blur(10px);padding:18px;text-align:center;}
+#rotMsg .card{max-width:520px;width:100%;background:rgba(10,15,30,.92);border:1px solid rgba(255,215,0,.25);
+  border-radius:18px;padding:18px 16px;box-shadow:0 20px 60px rgba(0,0,0,.75);}
+#rotMsg .t{font-family:'Orbitron',sans-serif;letter-spacing:2px;font-weight:900;color:var(--gold);font-size:14px;}
+#rotMsg .b{margin-top:10px;color:rgba(255,255,255,.75);font-size:16px;line-height:1.4;}
+#rotMsg .ic{font-size:46px;margin-top:12px;opacity:.9;}
+
+@media (max-width: 900px) and (orientation: portrait){
+  #rotMsg{display:flex;}
+}
+
 @media (max-width: 680px){
   #hdr{padding:10px 12px 10px 12px;gap:8px;flex-wrap:wrap;}
   .logo{font-size:28px;letter-spacing:3px;}
@@ -351,6 +364,14 @@ body.rain #railTop, body.rain #railBottom{filter:brightness(0.96) saturate(0.9);
 </style>
 </head>
 <body>
+
+<div id="rotMsg">
+  <div class="card">
+    <div class="t">LANDSCAPE REQUIRED</div>
+    <div class="b">Rotate your phone sideways to play Abstract Derby.</div>
+    <div class="ic">📱↻</div>
+  </div>
+</div>
 
 <div id="hdr">
   <div class="logo"><span class="lico">🏇</span><img id="absLogo" class="alogo" alt="" /><span>ABSTRACT DERBY</span></div>
@@ -1451,33 +1472,49 @@ function makeHorseCards() {
 }
 
 function randomizeOddsAndWinPct() {
-  // Generate odds per horse each race and compute implied win % (normalized).
-  // Keep odds within a readable range.
-  // NOTE: The previous implementation used a mostly-fixed base array, which made
-  // the "underdog" frequently the same horse.
-  const minO = 1.6;
-  const maxO = 7.2;
-  const center = 2.6 + (Math.random()*0.8 - 0.4); // shift the whole field a bit each race
-  const spread = 2.2 + (Math.random()*1.6);       // wider spread => more variation
-  const skills = HORSES.map(()=>{
-    // Skill in [0..1] biased towards the middle (less extreme favorites every time)
+  // More varied odds: some races are tight fields, some are skewed, some are wild.
+  // We sample strengths from a simple Dirichlet-like process, then convert to odds.
+  const u = Math.random();
+  const regime = (u < 0.45) ? 'tight' : (u < 0.82 ? 'mixed' : 'wild');
+  const minO = 1.1;
+  const maxO = (regime === 'wild') ? 10.5 : (regime === 'mixed' ? 8.2 : 4.2);
+
+  const alpha = (regime === 'tight') ? 6.0 : (regime === 'mixed' ? 2.2 : 0.85);
+  const gamma1 = () => {
+    // Gamma(k=1) = -ln(U). This is enough for variability; scale by alpha.
     const r = Math.random();
-    return (r + Math.random())/2;
+    return -Math.log(Math.max(1e-9, r));
+  };
+
+  // draw raw strengths
+  const raw = HORSES.map(() => {
+    const a = alpha;
+    // Approximate Gamma(alpha) by summing exponentials when alpha>1, else bias smaller.
+    if (a >= 1.2) {
+      const n = Math.max(1, Math.floor(a));
+      let s = 0;
+      for (let i=0;i<n;i++) s += gamma1();
+      s += (a - n) * gamma1();
+      return s;
+    }
+    return Math.pow(gamma1(), a);
   });
-  const avg = skills.reduce((a,b)=>a+b,0)/(skills.length||1) || 0.5;
-  const normSkills = skills.map(s=> (s-avg));
+  const sum = raw.reduce((a,b)=>a+b,0) || 1;
+  const p = raw.map(v => v / sum);
+
+  // house margin factor (slight) so odds are not too generous
+  const margin = (regime === 'tight') ? 0.93 : (regime === 'mixed' ? 0.90 : 0.88);
+
   HORSES.forEach((h,i)=>{
-    // Higher skill => lower odds, lower skill => higher odds.
-    const noise = (Math.random()*0.9 - 0.45);
-    const o = center + (-normSkills[i] * spread) + noise;
-    h.odds = Math.round(Math.max(minO, Math.min(maxO, o))*10)/10;
+    const pi = Math.max(0.01, Math.min(0.85, p[i]));
+    const fair = 1 / pi;
+    const o = fair / margin;
+    // Add a small per-horse noise so duplicates don't happen
+    const noisy = o * (0.94 + Math.random()*0.12);
+    h.odds = Math.round(Math.max(minO, Math.min(maxO, noisy))*10)/10;
   });
-  // Ensure there's a clear underdog sometimes (helps variety + mission feel)
-  if (Math.random() < 0.75) {
-    let maxIdx = 0;
-    for (let i=1;i<HORSES.length;i++) if (HORSES[i].odds > HORSES[maxIdx].odds) maxIdx=i;
-    HORSES[maxIdx].odds = Math.round(Math.min(maxO, HORSES[maxIdx].odds + (0.6 + Math.random()*1.2))*10)/10;
-  }
+
+  // Recompute implied win% from odds
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
   const t = w.reduce((a,b)=>a+b,0) || 1;
   HORSES.forEach((h,i)=>{ h.wp = (w[i]/t)*100; });
