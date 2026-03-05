@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>🏇 ABSTRACT DERBY</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700;800&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
@@ -20,6 +20,23 @@
   --shadow:0 10px 30px rgba(0,0,0,0.6);
 }
 body{background:var(--dark);font-family:'Barlow Condensed',sans-serif;overflow:hidden;user-select:none;height:100vh;display:flex;flex-direction:column;}
+
+@media (max-width: 680px){
+  #hdr{padding:10px 12px 10px 12px;gap:8px;flex-wrap:wrap;}
+  .logo{font-size:28px;letter-spacing:3px;}
+  .hdrMid{order:3;min-width:100%;max-width:100%;}
+  #midBanner{height:40px;}
+  .mp{padding:4px 10px;max-width:180px;}
+  .mpn{max-width:90px;font-size:10px;letter-spacing:1.6px;}
+  .sv{font-size:18px;}
+  #scene{min-height:320px;}
+}
+
+@media (max-width: 420px){
+  .logo{font-size:24px;}
+  .stats-row{gap:8px;flex-wrap:wrap;justify-content:center;}
+  .sbox{padding:4px 8px;}
+}
 
 :root{--trackBottom:3%;--trackHeight:50%;}
 
@@ -661,7 +678,7 @@ function setMidPodium(rank, fin){
     dot.style.background=col;
     dot.style.color=col;
     const done = (fin && fin[i]===id);
-    finEl.textContent = done ? 'FIN' : '';
+    finEl.textContent = done ? 'END' : '';
     mp.classList.toggle('done', !!done);
   }
 }
@@ -1436,13 +1453,31 @@ function makeHorseCards() {
 function randomizeOddsAndWinPct() {
   // Generate odds per horse each race and compute implied win % (normalized).
   // Keep odds within a readable range.
-  const base = [2.1, 2.4, 2.9, 2.2, 3.2, 4.2, 2.7];
-  HORSES.forEach((h,i)=>{
-    const b = base[i%base.length];
-    const jitter = (Math.random()*0.9 - 0.45);
-    const o = Math.max(1.6, Math.min(6.2, b + jitter));
-    h.odds = Math.round(o*10)/10;
+  // NOTE: The previous implementation used a mostly-fixed base array, which made
+  // the "underdog" frequently the same horse.
+  const minO = 1.6;
+  const maxO = 7.2;
+  const center = 2.6 + (Math.random()*0.8 - 0.4); // shift the whole field a bit each race
+  const spread = 2.2 + (Math.random()*1.6);       // wider spread => more variation
+  const skills = HORSES.map(()=>{
+    // Skill in [0..1] biased towards the middle (less extreme favorites every time)
+    const r = Math.random();
+    return (r + Math.random())/2;
   });
+  const avg = skills.reduce((a,b)=>a+b,0)/(skills.length||1) || 0.5;
+  const normSkills = skills.map(s=> (s-avg));
+  HORSES.forEach((h,i)=>{
+    // Higher skill => lower odds, lower skill => higher odds.
+    const noise = (Math.random()*0.9 - 0.45);
+    const o = center + (-normSkills[i] * spread) + noise;
+    h.odds = Math.round(Math.max(minO, Math.min(maxO, o))*10)/10;
+  });
+  // Ensure there's a clear underdog sometimes (helps variety + mission feel)
+  if (Math.random() < 0.75) {
+    let maxIdx = 0;
+    for (let i=1;i<HORSES.length;i++) if (HORSES[i].odds > HORSES[maxIdx].odds) maxIdx=i;
+    HORSES[maxIdx].odds = Math.round(Math.min(maxO, HORSES[maxIdx].odds + (0.6 + Math.random()*1.2))*10)/10;
+  }
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
   const t = w.reduce((a,b)=>a+b,0) || 1;
   HORSES.forEach((h,i)=>{ h.wp = (w[i]/t)*100; });
