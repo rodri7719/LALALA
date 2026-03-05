@@ -18,6 +18,7 @@ export function useVS(address) {
   const pendingFind = useRef(false);
   const failedReconnects = useRef(0);
   const loggedWsError = useRef(false);
+  const lobbyPollRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState({ online: 0, inQueue: 0, inMatches: 0 });
   const [vsState, setVsState] = useState('idle');
@@ -64,10 +65,12 @@ export function useVS(address) {
       if (wsRef.current) {
         try {
           if (wsRef.current._pingInterval) clearInterval(wsRef.current._pingInterval);
+          if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
           wsRef.current.close();
         } catch (e) {}
         wsRef.current = null;
       }
+      lobbyPollRef.current = null;
       setConnected(false);
       setVsState('idle');
       setMatchData(null);
@@ -98,6 +101,9 @@ export function useVS(address) {
         socket.send(JSON.stringify({ type: 'register', address, nick, game: gameRef.current || 'hub' }));
         console.log('[useVS] Registered with address:', address);
 
+        // Grab initial snapshots so embedded games (like chess) always get users.
+        socket.send(JSON.stringify({ type: 'get_lobby_users' }));
+
         socket.send(JSON.stringify({ type: 'get_weekly_leaderboard' }));
 
         if (pendingFind.current) {
@@ -112,6 +118,13 @@ export function useVS(address) {
         }, 15000);
 
         socket._pingInterval = pingInterval;
+
+        if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
+        lobbyPollRef.current = setInterval(() => {
+          try {
+            if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'get_lobby_users' }));
+          } catch (e) {}
+        }, 5000);
       };
       socket.onmessage = (event) => {
         try {
@@ -203,6 +216,8 @@ export function useVS(address) {
         });
         setConnected(false);
         if (socket._pingInterval) clearInterval(socket._pingInterval);
+        if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
+        lobbyPollRef.current = null;
         if (!activeRef.current) return;
         failedReconnects.current = (failedReconnects.current || 0) + 1;
         reconnectTimer.current = setTimeout(() => {
@@ -229,8 +244,10 @@ export function useVS(address) {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (wsRef.current) {
         if (wsRef.current._pingInterval) clearInterval(wsRef.current._pingInterval);
+        if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
         wsRef.current.close();
       }
+      lobbyPollRef.current = null;
     };
   }, [address]);
 

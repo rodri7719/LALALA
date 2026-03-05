@@ -567,6 +567,15 @@ export default function App() {
     try { vs.setGame(g); } catch {}
   }, [isConnected, address, currentGame?.id]);
 
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    if (currentGame?.id !== 'chess') return;
+    const t = setInterval(() => {
+      try { vs.requestLobbyUsers(); } catch {}
+    }, 5000);
+    return () => clearInterval(t);
+  }, [isConnected, address, currentGame?.id]);
+
   // ── Auto-enter after wallet connects ──
   useEffect(() => {
     if (isConnected && pendingGame.current) {
@@ -896,7 +905,7 @@ export default function App() {
       ? users.filter(u => String(u?.game || '').toLowerCase() === 'chess')
       : users;
     win.postMessage({ type: "LOBBY_USERS", users: filtered }, "*");
-  }, [vs.lobbyUsers]);
+  }, [vs.lobbyUsers, currentGame?.id, iframeLoaded]);
 
   useEffect(() => {
     const win = vsBridgeRef.current?.win;

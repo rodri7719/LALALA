@@ -781,6 +781,8 @@ const HORSES = [
 ];
 const N = HORSES.length;
 
+let _prevMaxOdds = 6.2;
+
 // Per-horse image cache
 const HORSE_IMAGES = {};
 const HORSE_META = {};
@@ -1507,11 +1509,15 @@ function randomizeOddsAndWinPct() {
   // More varied odds: some races are tight fields, some are skewed, some are wild.
   // We sample strengths from a simple Dirichlet-like process, then convert to odds.
   const u = Math.random();
-  const regime = (u < 0.45) ? 'tight' : (u < 0.82 ? 'mixed' : 'wild');
-  const minO = 1.1;
-  const maxO = (regime === 'wild') ? 10.5 : (regime === 'mixed' ? 8.2 : 4.2);
+  const regime = (u < 0.50) ? 'tight' : (u < 0.90 ? 'mixed' : 'wild');
+  const minO = 1.2;
 
-  const alpha = (regime === 'tight') ? 6.0 : (regime === 'mixed' ? 2.2 : 0.85);
+  // Keep max odds bounded and smooth between races so it doesn't jump from x4 to x10.
+  const sampledMax = (regime === 'wild') ? 7.6 : (regime === 'mixed' ? 6.1 : 4.4);
+  const maxO = Math.round((_prevMaxOdds * 0.55 + sampledMax * 0.45) * 10) / 10;
+  _prevMaxOdds = maxO;
+
+  const alpha = (regime === 'tight') ? 7.0 : (regime === 'mixed' ? 2.6 : 1.05);
   const gamma1 = () => {
     // Gamma(k=1) = -ln(U). This is enough for variability; scale by alpha.
     const r = Math.random();
@@ -1535,7 +1541,7 @@ function randomizeOddsAndWinPct() {
   const p = raw.map(v => v / sum);
 
   // house margin factor (slight) so odds are not too generous
-  const margin = (regime === 'tight') ? 0.93 : (regime === 'mixed' ? 0.90 : 0.88);
+  const margin = (regime === 'tight') ? 0.92 : (regime === 'mixed' ? 0.90 : 0.89);
 
   HORSES.forEach((h,i)=>{
     const pi = Math.max(0.01, Math.min(0.85, p[i]));
@@ -1587,6 +1593,19 @@ function randomizeOddsAndWinPct() {
   };
 
   enforceSpread();
+
+  // Make sure there is a clear underdog but keep it within the max cap.
+  // This helps "underdog stands out" without pushing half the field to x7+.
+  try{
+    const ord = [...HORSES].sort((a,b)=>Number(a.odds)-Number(b.odds));
+    const fav = ord[0];
+    const dog = ord[ord.length-1];
+    const favO = Number(fav?.odds||2);
+    let dogO = Number(dog?.odds||maxO);
+    const targetDog = Math.min(maxO, Math.max(favO + 2.0, maxO - 0.3));
+    dogO = Math.max(dogO, targetDog);
+    dog.odds = Math.round(Math.min(maxO, dogO) * 10) / 10;
+  }catch(e){}
 
   // Recompute implied win% from odds
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
