@@ -1,13 +1,101 @@
+import http from 'http';
 import { WebSocketServer } from 'ws';
+import fs from 'fs';
+import path from 'path';
 
 const PORT = Number(process.env.PORT || 8787);
-const wss = new WebSocketServer({ port: PORT });
+const server = http.createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('ok');
+    return;
+  }
+  res.writeHead(200, { 'content-type': 'text/plain' });
+  res.end('pudgy-vs-server');
+});
+
+const wss = new WebSocketServer({ server });
 
 const clients = new Map(); // socket -> { id, address, state, room, lastPing }
 const queue = new Set(); // waiting for match
 const rooms = new Map(); // roomId -> { p1, p2, state, seed, startTime }
 const credits = new Map(); // address -> number of paid credits usable for future matches
 const nicks = new Map(); // address -> nickname
+
+const weeklyScores = new Map(); // address -> { points, nick, updatedAt }
+const DATA_DIR = path.join(process.cwd(), 'data');
+const WEEKLY_FILE = path.join(DATA_DIR, 'weekly-leaderboard.json');
+
+function friday00UtcWeekKey(ts = Date.now()) {
+  const d = new Date(ts);
+  const day = d.getUTCDay();
+  const diff = (day - 5 + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+let weeklyKey = friday00UtcWeekKey();
+
+function weeklyResetIfNeeded() {
+  const k = friday00UtcWeekKey();
+  if (k === weeklyKey) return;
+  weeklyKey = k;
+  weeklyScores.clear();
+  weeklyPersist();
+}
+
+function weeklyPersist() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const obj = {
+      weeklyKey,
+      scores: Array.from(weeklyScores.entries()).map(([address, v]) => ({ address, ...v })),
+    };
+    fs.writeFileSync(WEEKLY_FILE, JSON.stringify(obj));
+  } catch (e) {
+    console.warn('[WEEKLY] persist failed', e);
+  }
+}
+
+function weeklyLoad() {
+  try {
+    if (!fs.existsSync(WEEKLY_FILE)) return;
+    const raw = fs.readFileSync(WEEKLY_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    if (parsed.weeklyKey) weeklyKey = String(parsed.weeklyKey);
+    const cur = friday00UtcWeekKey();
+    if (weeklyKey !== cur) {
+      weeklyKey = cur;
+      weeklyScores.clear();
+      weeklyPersist();
+      return;
+    }
+    const arr = Array.isArray(parsed.scores) ? parsed.scores : [];
+    for (const it of arr) {
+      const a = String(it.address || '').toLowerCase();
+      if (!a) continue;
+      const pts = Number(it.points || 0);
+      weeklyScores.set(a, { points: Number.isFinite(pts) ? pts : 0, nick: it.nick || null, updatedAt: Number(it.updatedAt || Date.now()) });
+    }
+  } catch (e) {
+    console.warn('[WEEKLY] load failed', e);
+  }
+}
+
+weeklyLoad();
+
+function getWeeklyTop10() {
+  weeklyResetIfNeeded();
+  const rows = Array.from(weeklyScores.entries()).map(([address, v]) => ({ address, points: v.points || 0, nick: v.nick || getNick(address) || null }));
+  rows.sort((a, b) => (b.points || 0) - (a.points || 0));
+  return rows.slice(0, 10);
+}
+
+function broadcastWeeklyLeaderboard() {
+  broadcastAll('weekly_leaderboard', { weeklyKey, top: getWeeklyTop10() });
+}
 
 let roomCounter = 0;
 
@@ -271,6 +359,19 @@ wss.on('connection', (socket) => {
             const nn = normNick(msg.nick);
             if (nn) nicks.set(client.address, nn);
           }
+
+          // If the same wallet reconnects, ensure only one active socket exists.
+          // This prevents stale/busy ghost sessions that make challenges fail.
+          for (const [s, c] of clients.entries()) {
+            if (s === socket) continue;
+            if (!c?.address) continue;
+            if (String(c.address).toLowerCase() !== client.address) continue;
+            try {
+              console.log(`[DEDUP] Closing previous socket for ${client.address} (id=${c.id})`);
+              s.close();
+            } catch (e) {}
+          }
+
           broadcast(socket, 'registered', { address: client.address });
           console.log(`[REGISTER] ${msg.address} - Total clients: ${clients.size}`);
           broadcastLobbyUsers();
@@ -292,6 +393,28 @@ wss.on('connection', (socket) => {
             const text = String(msg.text || '').slice(0, 200);
             if (!text.trim()) return;
             broadcastAll('lobby_chat', { from: client.address, fromNick: getNick(client.address), text, ts: Date.now() });
+          }
+          break;
+
+        case 'weekly_points':
+          {
+            if (!client.address) return;
+            weeklyResetIfNeeded();
+            const pts = Number(msg.points || 0);
+            if (!Number.isFinite(pts) || pts <= 0) return;
+            const a = String(client.address).toLowerCase();
+            const prev = weeklyScores.get(a) || { points: 0, nick: getNick(a) || null, updatedAt: Date.now() };
+            const next = { points: (prev.points || 0) + pts, nick: getNick(a) || prev.nick || null, updatedAt: Date.now() };
+            weeklyScores.set(a, next);
+            weeklyPersist();
+            broadcastWeeklyLeaderboard();
+          }
+          break;
+
+        case 'get_weekly_leaderboard':
+          {
+            weeklyResetIfNeeded();
+            broadcast(socket, 'weekly_leaderboard', { weeklyKey, top: getWeeklyTop10() });
           }
           break;
 
@@ -570,4 +693,6 @@ setInterval(() => {
   }
 }, 5000);
 
-console.log(`🎮 VS Server running on ws://localhost:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🎮 VS Server listening on :${PORT}`);
+});

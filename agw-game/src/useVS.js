@@ -2,11 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 
 const WS_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_WS_URL)
   ? String(import.meta.env.VITE_WS_URL)
-  : 'ws://localhost:8787';
+  : (() => {
+      try {
+        const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+          ? window.location.hostname
+          : 'localhost';
+        return `ws://${host}:8787`;
+      } catch {
+        return 'ws://localhost:8787';
+      }
+    })();
 
 export function useVS(address) {
   const wsRef = useRef(null);
   const pendingFind = useRef(false);
+  const failedReconnects = useRef(0);
+  const loggedWsError = useRef(false);
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState({ online: 0, inQueue: 0, inMatches: 0 });
   const [vsState, setVsState] = useState('idle');
@@ -19,13 +30,28 @@ export function useVS(address) {
   const [lastLobbyChat, setLastLobbyChat] = useState(null); // { from, fromNick, text, ts }
   const [lastChallengeInvite, setLastChallengeInvite] = useState(null); // { from, fromNick }
   const [lastChallengeEvent, setLastChallengeEvent] = useState(null); // { type, ...payload }
+  const [weeklyLeaderboard, setWeeklyLeaderboard] = useState(null); // { weeklyKey, top }
   const [nick, setNick] = useState(() => {
     try { return localStorage.getItem('pudgy_nick') || ''; } catch (e) { return ''; }
   });
   const reconnectTimer = useRef(null);
+  const activeRef = useRef(false);
 
   useEffect(() => {
     if (!address) {
+      activeRef.current = false;
+      pendingFind.current = false;
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      if (wsRef.current) {
+        try {
+          if (wsRef.current._pingInterval) clearInterval(wsRef.current._pingInterval);
+          wsRef.current.close();
+        } catch (e) {}
+        wsRef.current = null;
+      }
       setConnected(false);
       setVsState('idle');
       setMatchData(null);
@@ -40,15 +66,23 @@ export function useVS(address) {
       return;
     }
 
+    activeRef.current = true;
+
     const connect = () => {
+      if (failedReconnects.current >= 6) {
+        return;
+      }
       const socket = new WebSocket(WS_URL);
       wsRef.current = socket;
 
       socket.onopen = () => {
         console.log('[useVS] WebSocket connected');
+        failedReconnects.current = 0;
         setConnected(true);
         socket.send(JSON.stringify({ type: 'register', address, nick }));
         console.log('[useVS] Registered with address:', address);
+
+        socket.send(JSON.stringify({ type: 'get_weekly_leaderboard' }));
 
         if (pendingFind.current) {
           pendingFind.current = false;
@@ -128,6 +162,10 @@ export function useVS(address) {
               setLastChallengeEvent({ type: msg.type, ...msg });
               break;
 
+            case 'weekly_leaderboard':
+              setWeeklyLeaderboard({ weeklyKey: msg.weeklyKey, top: Array.isArray(msg.top) ? msg.top : [] });
+              break;
+
             case 'nick_updated':
               setNick(String(msg.nick || ''));
               try { localStorage.setItem('pudgy_nick', String(msg.nick || '')); } catch (e) {}
@@ -142,21 +180,28 @@ export function useVS(address) {
         console.log('[useVS] WebSocket closed');
         setConnected(false);
         if (socket._pingInterval) clearInterval(socket._pingInterval);
+        if (!activeRef.current) return;
+        failedReconnects.current = (failedReconnects.current || 0) + 1;
         reconnectTimer.current = setTimeout(() => {
+          if (!activeRef.current) return;
           console.log('[useVS] Reconnecting...');
           connect();
         }, 3000);
       };
 
       socket.onerror = (err) => {
-        console.error('[useVS] WebSocket error:', err);
-        console.error('[useVS] WebSocket readyState:', socket.readyState);
+        if (!loggedWsError.current) {
+          loggedWsError.current = true;
+          console.warn('[useVS] WebSocket error (server likely offline).');
+          console.warn('[useVS] WS URL:', WS_URL);
+        }
       };
     };
 
     connect();
 
     return () => {
+      activeRef.current = false;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (wsRef.current) {
         if (wsRef.current._pingInterval) clearInterval(wsRef.current._pingInterval);
@@ -253,6 +298,19 @@ export function useVS(address) {
     }
   };
 
+  const addWeeklyPoints = (points) => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      const pts = Number(points || 0);
+      if (Number.isFinite(pts) && pts > 0) wsRef.current.send(JSON.stringify({ type: 'weekly_points', points: pts }));
+    }
+  };
+
+  const requestWeeklyLeaderboard = () => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'get_weekly_leaderboard' }));
+    }
+  };
+
   return {
     connected,
     stats,
@@ -266,6 +324,7 @@ export function useVS(address) {
     lastLobbyChat,
     lastChallengeInvite,
     lastChallengeEvent,
+    weeklyLeaderboard,
     nick,
     findMatch,
     cancelFind,
@@ -279,6 +338,8 @@ export function useVS(address) {
     sendLobbyChat,
     challenge,
     respondChallenge,
+    addWeeklyPoints,
+    requestWeeklyLeaderboard,
     setNickname,
   };
 }

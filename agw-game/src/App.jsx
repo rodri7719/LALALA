@@ -30,22 +30,22 @@ const GAMES = [
   {
     id: "crush",
     title: "Pudgy Crush",
-    emoji: "🧊",
-    desc: "Match penguins, break ice, collect XP",
+    emoji: "⚡",
+    desc: "Crush combos, unleash power-ups, climb weekly points",
     src: "/pudgy-crush.html",
     color1: "#00d9ff",
     color2: "#0066ff",
-    icon: "❄️",
+    icon: "⚡",
   },
   {
-    id: "snowball",
-    title: "Snowball Smash",
-    emoji: "⛄",
-    desc: "Smash snowballs in the arctic arena",
-    src: "/game8.html",
-    color1: "#ffaa00",
-    color2: "#ff6600",
-    icon: "🔥",
+    id: "derby",
+    title: "Abstract Derby",
+    emoji: "🏇",
+    desc: "Bet smart, chase the podium, climb weekly points",
+    src: "/horse-racing.html",
+    color1: "#ffd700",
+    color2: "#00b4ff",
+    icon: "🏁",
   },
   {
     id: "chess",
@@ -69,7 +69,7 @@ function gameIdToUint8(gameId) {
   switch (gameId) {
     case "crush":
       return 1;
-    case "snowball":
+    case "derby":
       return 2;
     case "chess":
       return 3;
@@ -310,13 +310,87 @@ export default function App() {
   const [modal,       setModal]       = useState(null);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [nickModalOpen, setNickModalOpen] = useState(false);
+  const [preGame, setPreGame] = useState(null);
+
+  const menuMusicRef = useRef(null);
+  const menuMusicStartedRef = useRef(false);
+  const [menuMusicPausedForGame, setMenuMusicPausedForGame] = useState(false);
+  const [menuMusicMuted, setMenuMusicMuted] = useState(() => {
+    try { return localStorage.getItem('MENU_MUSIC_MUTED') === '1'; } catch { return false; }
+  });
+  const [menuMusicVol, setMenuMusicVol] = useState(() => {
+    try {
+      const v = parseFloat(localStorage.getItem('MENU_MUSIC_VOL') || '0.55');
+      if (!Number.isFinite(v)) return 0.55;
+      return Math.max(0, Math.min(1, v));
+    } catch {
+      return 0.55;
+    }
+  });
+
+  const hubSnowCanvasRef = useRef(null);
 
   const isConnected = status === "connected";
   const playerAddress = address || null;
-  const vs = useVS(playerAddress && currentGame?.id === 'chess' ? playerAddress : null);
+  const vs = useVS(playerAddress);
   const vsBridgeRef = useRef({ win: null, gameId: null });
   const iframeRef                     = useRef(null);
   const pendingGame                   = useRef(null); // game to launch after wallet connects
+
+  const [weeklyLocalVer, setWeeklyLocalVer] = useState(0);
+
+  const friday00UtcKey = useCallback((ts = Date.now()) => {
+    const d = new Date(ts);
+    const day = d.getUTCDay();
+    const diff = (day - 5 + 7) % 7;
+    d.setUTCDate(d.getUTCDate() - diff);
+    d.setUTCHours(0, 0, 0, 0);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const getWeeklyKeyForLocal = useCallback(() => {
+    const k = vs.weeklyLeaderboard?.weeklyKey;
+    if (k) return String(k);
+    return friday00UtcKey();
+  }, [vs.weeklyLeaderboard, friday00UtcKey]);
+
+  const addLocalWeeklyPoints = useCallback((points) => {
+    const a = String(address || '').toLowerCase();
+    if (!a) return;
+    const pts = Number(points || 0);
+    if (!Number.isFinite(pts) || pts <= 0) return;
+    const wk = getWeeklyKeyForLocal();
+    const key = `WEEKLY_LOCAL_${wk}_${a}`;
+    try {
+      const prev = Number(localStorage.getItem(key) || '0') || 0;
+      localStorage.setItem(key, String(prev + pts));
+      setWeeklyLocalVer(v => v + 1);
+    } catch {}
+  }, [address, getWeeklyKeyForLocal]);
+
+  const getLocalWeeklyPoints = useCallback(() => {
+    const a = String(address || '').toLowerCase();
+    if (!a) return 0;
+    const wk = getWeeklyKeyForLocal();
+    const key = `WEEKLY_LOCAL_${wk}_${a}`;
+    try { return Number(localStorage.getItem(key) || '0') || 0; } catch { return 0; }
+  }, [address, getWeeklyKeyForLocal]);
+
+  const myWeeklyPoints = useCallback(() => {
+    const a = String(address || '').toLowerCase();
+    if (!a) return 0;
+    const top = vs.weeklyLeaderboard?.top || null;
+    if (Array.isArray(top) && top.length > 0) {
+      const row = top.find(r => String(r.address || '').toLowerCase() === a);
+      const v = Number(row?.points || 0) || 0;
+      if (v > 0) return v;
+    }
+    return getLocalWeeklyPoints();
+  }, [address, vs.weeklyLeaderboard, getLocalWeeklyPoints, weeklyLocalVer]);
+
+  const myLifetimeDerbyPoints = useCallback(() => {
+    try { return Number(localStorage.getItem('DERBY_LIFE_POINTS') || '0') || 0; } catch { return 0; }
+  }, []);
 
   const shortAddr = useCallback((a) => {
     if (!a) return "";
@@ -325,30 +399,292 @@ export default function App() {
     return s.slice(0, 6) + "..." + s.slice(-4);
   }, []);
 
+  const ensureMenuMusic = useCallback(async () => {
+    try {
+      if (!menuMusicRef.current) {
+        const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) ? import.meta.env.BASE_URL : '/';
+        const src = (base.endsWith('/') ? base : (base + '/')) + 'PIOPIOPIO.mp3';
+        const a = new Audio(src);
+        a.loop = true;
+        a.preload = 'auto';
+        a.volume = menuMusicVol;
+        a.muted = !!menuMusicMuted;
+        menuMusicRef.current = a;
+      }
+      if (menuMusicPausedForGame) {
+        menuMusicRef.current.pause();
+        return;
+      }
+      if (menuMusicStartedRef.current) return;
+      menuMusicStartedRef.current = true;
+      await menuMusicRef.current.play();
+    } catch {
+      // ignore autoplay restrictions
+    }
+  }, [menuMusicMuted, menuMusicPausedForGame, menuMusicVol]);
+
+  useEffect(() => {
+    const a = menuMusicRef.current;
+    if (!a) return;
+    a.volume = menuMusicVol;
+    a.muted = !!menuMusicMuted;
+    try {
+      localStorage.setItem('MENU_MUSIC_MUTED', menuMusicMuted ? '1' : '0');
+      localStorage.setItem('MENU_MUSIC_VOL', String(menuMusicVol));
+    } catch {}
+
+    if (menuMusicPausedForGame) {
+      a.pause();
+    } else {
+      if (menuMusicStartedRef.current) {
+        a.play().catch(() => {});
+      }
+    }
+  }, [menuMusicMuted, menuMusicPausedForGame, menuMusicVol]);
+
+  useEffect(() => {
+    if (currentGame) return;
+    const onFirstGesture = () => {
+      ensureMenuMusic();
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+    window.addEventListener('pointerdown', onFirstGesture, { passive: true });
+    window.addEventListener('keydown', onFirstGesture);
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+  }, [currentGame, ensureMenuMusic]);
+
+  useEffect(() => {
+    if (!currentGame) {
+      setMenuMusicPausedForGame(false);
+    }
+  }, [currentGame]);
+
+  useEffect(() => {
+    if (currentGame) return;
+
+    const cv = hubSnowCanvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+
+    let raf = 0;
+    let w = 0;
+    let h = 0;
+    let flakes = [];
+
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const MAX_FLAKES = 120;
+
+    const resize = () => {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      cv.width = Math.floor(w * DPR);
+      cv.height = Math.floor(h * DPR);
+      cv.style.width = w + 'px';
+      cv.style.height = h + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+      const targetCount = Math.max(45, Math.min(MAX_FLAKES, Math.floor((w * h) / 18000)));
+      if (flakes.length > targetCount) flakes = flakes.slice(0, targetCount);
+      while (flakes.length < targetCount) {
+        flakes.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: 1 + Math.random() * 2.6,
+          vy: 0.6 + Math.random() * 1.9,
+          vx: -0.35 + Math.random() * 0.7,
+          a: 0.15 + Math.random() * 0.35,
+          sway: Math.random() * Math.PI * 2,
+        });
+      }
+    };
+
+    const tick = () => {
+      ctx.clearRect(0, 0, w, h);
+      ctx.beginPath();
+      for (const f of flakes) {
+        f.sway += 0.01;
+        f.x += f.vx + Math.sin(f.sway) * 0.25;
+        f.y += f.vy;
+        if (f.y > h + 8) {
+          f.y = -10;
+          f.x = Math.random() * w;
+        }
+        if (f.x < -10) f.x = w + 10;
+        if (f.x > w + 10) f.x = -10;
+        ctx.moveTo(f.x + f.r, f.y);
+        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fill();
+
+      raf = window.requestAnimationFrame(tick);
+    };
+
+    resize();
+    raf = window.requestAnimationFrame(tick);
+    window.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, [currentGame]);
+
   // ── Enter game — FREE to enter. Payment requested by the game itself on PLAY click ──
   const handleEnter = useCallback((game) => {
+    ensureMenuMusic();
     if (!isConnected) {
       pendingGame.current = game;
       login(); // synchronous user gesture — required by browser popup rules
       return;
     }
+    if (game?.id === 'derby') {
+      setPreGame(game);
+      return;
+    }
     setCurrentGame(game);
-  }, [isConnected, login]);
+  }, [isConnected, login, ensureMenuMusic]);
 
   // ── Auto-enter after wallet connects ──
   useEffect(() => {
     if (isConnected && pendingGame.current) {
       const g = pendingGame.current;
       pendingGame.current = null;
-      setCurrentGame(g);
+      if (g?.id === 'derby') setPreGame(g);
+      else setCurrentGame(g);
     }
   }, [isConnected]);
 
-  // ── Send address to iframe ──
+  const PreMenu = preGame ? (
+    <div
+      onClick={() => setPreGame(null)}
+      style={{
+        position:"fixed",
+        inset:0,
+        zIndex:100002,
+        background:"rgba(0,0,0,.82)",
+        backdropFilter:"blur(14px)",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+        padding:18,
+      }}
+    >
+      <div
+        onClick={(ev) => ev.stopPropagation()}
+        style={{
+          width:640,
+          maxWidth:"100%",
+          borderRadius:22,
+          padding:"22px 22px",
+          background:"linear-gradient(160deg,rgba(8,16,30,.96),rgba(6,10,18,.96))",
+          border:`1px solid ${preGame.color1}55`,
+          boxShadow:`0 26px 70px rgba(0,0,0,.75),0 0 40px ${preGame.color1}22`,
+          color:"#fff",
+          fontFamily:"'Baloo 2',cursive",
+        }}
+      >
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:14 }}>
+          <div>
+            <div style={{ fontSize:"2.3rem", lineHeight:1 }}>{preGame.emoji}</div>
+            <div style={{ fontWeight:900, fontSize:"1.25rem", letterSpacing:".03em" }}>{preGame.title}</div>
+            <div style={{ color:"rgba(255,255,255,.55)", fontSize:".88rem", marginTop:2 }}>{preGame.desc}</div>
+          </div>
+          <div style={{ textAlign:"right", fontSize:".72rem", color:"rgba(255,255,255,.45)" }}>
+            Entry per race
+            <div style={{ fontWeight:900, color:"rgba(255,255,255,.8)" }}>0.00001 ETH + fee</div>
+            <div style={{ marginTop:6, color:"rgba(255,255,255,.35)" }}>Weekly resets Fri 00:00 UTC</div>
+            <div style={{ marginTop:10, fontSize:".74rem", color:"rgba(255,255,255,.62)" }}>
+              Lifetime Points
+              <span style={{ marginLeft:8, fontWeight:900, color:"#ffd700" }}>{myLifetimeDerbyPoints().toLocaleString()}</span>
+            </div>
+            {isConnected && address && (
+              <div style={{ marginTop:6, fontSize:".74rem", color:"rgba(255,255,255,.62)" }}>
+                Weekly Points
+                <span style={{ marginLeft:8, fontWeight:900, color:"#a8f0c6" }}>{myWeeklyPoints().toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop:14, padding:"12px 12px", borderRadius:16, background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.10)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+            <div style={{ fontWeight:900, letterSpacing:".08em", fontSize:".78rem", color:"rgba(255,255,255,.85)" }}>WEEKLY TOP 10</div>
+            <div style={{ fontSize:".7rem", color:"rgba(255,255,255,.35)" }}>live</div>
+          </div>
+          <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+            {(vs.weeklyLeaderboard?.top || []).slice(0, 5).map((r, i) => (
+              <div key={String(r.address || i)} style={{ display:"flex", justifyContent:"space-between", gap:10, fontSize:".78rem" }}>
+                <div style={{ color:"rgba(255,255,255,.65)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {i+1}. {r.nick ? String(r.nick) : String(r.address || '').slice(0,6)+'…'+String(r.address||'').slice(-4)}
+                </div>
+                <div style={{ fontWeight:900, color:"rgba(255,255,255,.9)" }}>{Number(r.points||0).toLocaleString()}</div>
+              </div>
+            ))}
+            {(!vs.weeklyLeaderboard?.top || vs.weeklyLeaderboard.top.length === 0) && (
+              <div style={{ fontSize:".78rem", color:"rgba(255,255,255,.35)" }}>No scores yet.</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop:14, display:"flex", gap:10 }}>
+          <button
+            onClick={() => setPreGame(null)}
+            style={{
+              flex:1,
+              padding:"12px 0",
+              borderRadius:14,
+              border:"1px solid rgba(255,255,255,.14)",
+              background:"transparent",
+              color:"rgba(255,255,255,.7)",
+              cursor:"pointer",
+              fontWeight:900,
+              letterSpacing:".08em",
+              fontSize:".9rem",
+            }}
+          >
+            BACK
+          </button>
+          <button
+            onClick={() => {
+              // Stop hub music only when actually entering the game iframe
+              setMenuMusicPausedForGame(true);
+              setCurrentGame(preGame);
+              setPreGame(null);
+            }}
+            style={{
+              flex:1.4,
+              padding:"12px 0",
+              borderRadius:14,
+              border:`1px solid ${preGame.color1}66`,
+              background:`linear-gradient(135deg,${preGame.color1},${preGame.color2})`,
+              color:"#061018",
+              cursor:"pointer",
+              fontWeight:900,
+              letterSpacing:".1em",
+              fontSize:".95rem",
+              boxShadow:`0 10px 30px ${preGame.color1}30`,
+            }}
+          >
+            ENTER 🏁
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  // ── Send player identity to iframe (nick should work even before wallet connects) ──
   useEffect(() => {
-    if (!address || !iframeRef.current) return;
+    if (!iframeRef.current) return;
     const t = setTimeout(() => {
-      iframeRef.current?.contentWindow?.postMessage({ type:"AGW_SET_PLAYER", address, nick: vs.nick }, "*");
+      iframeRef.current?.contentWindow?.postMessage(
+        { type:"AGW_SET_PLAYER", address: address || null, nick: vs.nick || "" },
+        "*"
+      );
     }, 600);
     return () => clearTimeout(t);
   }, [address, currentGame, vs.nick]);
@@ -363,6 +699,7 @@ export default function App() {
       }
 
       if (e.data?.type === "AGW_PLAY") {
+        setMenuMusicPausedForGame(true);
         if (!isConnected) {
           iframeRef.current?.contentWindow?.postMessage(
             { type:"AGW_TX_ERROR", msg:"Wallet not connected" }, "*"
@@ -398,6 +735,10 @@ export default function App() {
 
       if (e.data?.type === "AGW_WALLET_MENU") {
         setWalletMenuOpen(true);
+      }
+
+      if (e.data?.type === "AGW_NICK_MENU") {
+        setNickModalOpen(true);
       }
 
       if (e.data?.type === "VS_FIND_MATCH") {
@@ -451,10 +792,28 @@ export default function App() {
         const accept = !!e.data?.accept;
         if (from) vs.respondChallenge(from, accept);
       }
+
+      if (e.data?.type === "CHESS_WEEKLY_POINTS") {
+        const pts = Number(e.data?.points || 0);
+        if (Number.isFinite(pts) && pts > 0) {
+          console.log('[CHESS_WEEKLY_POINTS]', pts);
+          vs.addWeeklyPoints(pts);
+        }
+      }
+
+      if (e.data?.type === "DERBY_WEEKLY_POINTS") {
+        const pts = Number(e.data?.points || 0);
+        if (Number.isFinite(pts) && pts > 0) {
+          console.log('[DERBY_WEEKLY_POINTS]', pts);
+          vs.addWeeklyPoints(pts);
+          addLocalWeeklyPoints(pts);
+        }
+      }
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [isConnected, currentGame, sendTransaction, login, vs]);
+  }, [sendTransaction, isPending, currentGame, vs, address, addLocalWeeklyPoints]);
+
 
   useEffect(() => {
     const win = vsBridgeRef.current?.win;
@@ -526,6 +885,13 @@ export default function App() {
     if (!vs.lastChallengeEvent?.type) return;
     win.postMessage({ type: "VS_CHALLENGE_EVENT", event: vs.lastChallengeEvent }, "*");
   }, [vs.lastChallengeEvent]);
+
+  useEffect(() => {
+    const win = vsBridgeRef.current?.win;
+    if (!win) return;
+    if (!vs.weeklyLeaderboard?.weeklyKey) return;
+    win.postMessage({ type: "WEEKLY_LEADERBOARD", weeklyKey: vs.weeklyLeaderboard.weeklyKey, top: vs.weeklyLeaderboard.top }, "*");
+  }, [vs.weeklyLeaderboard]);
 
   useEffect(() => {
     const win = vsBridgeRef.current?.win;
@@ -684,8 +1050,8 @@ export default function App() {
             position:"fixed", top:12, right:12, zIndex:10000,
             background:"rgba(0,0,0,.75)", backdropFilter:"blur(10px)",
             border:"1px solid rgba(255,255,255,.15)", color:"#fff", borderRadius:12,
-            padding:"8px 18px", cursor:"pointer",
-            fontFamily:"'Baloo 2',cursive", fontSize:".85rem", fontWeight:700,
+            padding:"6px 14px", cursor:"pointer",
+            fontFamily:"'Baloo 2',cursive", fontSize:".78rem", fontWeight:700,
           }}
         >
           ← Back
@@ -733,6 +1099,20 @@ export default function App() {
 
       <Aurora />
       <Particles />
+
+      {PreMenu}
+
+      <canvas
+        ref={hubSnowCanvasRef}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1,
+          pointerEvents: 'none',
+          opacity: 0.75,
+          mixBlendMode: 'screen',
+        }}
+      />
 
       {walletMenuOpen && WalletMenu}
 
@@ -818,6 +1198,50 @@ export default function App() {
         padding:"40px 20px", gap:16,
       }}>
 
+        <div style={{
+          position:"fixed",
+          left:16,
+          bottom:16,
+          zIndex:120,
+          display:"flex",
+          alignItems:"center",
+          gap:10,
+          padding:"10px 12px",
+          borderRadius:14,
+          background:"rgba(0,0,0,.55)",
+          border:"1px solid rgba(255,255,255,.14)",
+          backdropFilter:"blur(10px)",
+          fontFamily:"'Baloo 2',cursive",
+          color:"rgba(255,255,255,.85)",
+        }}>
+          <button
+            onClick={() => setMenuMusicMuted(v => !v)}
+            style={{
+              background:"rgba(255,255,255,.06)",
+              border:"1px solid rgba(255,255,255,.12)",
+              color:"#fff",
+              borderRadius:12,
+              padding:"8px 10px",
+              cursor:"pointer",
+              fontWeight:900,
+              fontSize:".8rem",
+              letterSpacing:".06em",
+            }}
+          >
+            {menuMusicMuted ? 'MUTED' : 'MUSIC'}
+          </button>
+
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={menuMusicVol}
+            onChange={(e) => setMenuMusicVol(parseFloat(e.target.value))}
+            style={{ width: 140 }}
+          />
+        </div>
+
         {/* Wallet connect button — only shown when not connected, top right */}
         {!isConnected && (
           <div style={{ position:"fixed", top:16, right:16, zIndex:100, animation:"fadeInUp .5s ease-out" }}>
@@ -842,18 +1266,17 @@ export default function App() {
               style={{
                 background:"rgba(255,255,255,.06)",
                 border:"1px solid rgba(255,255,255,.14)",
+                color:"#fff",
+                padding:"10px 14px",
                 borderRadius:14,
-                padding:"10px 16px",
-                fontFamily:"'Baloo 2',cursive",
-                fontSize:".8rem",
-                fontWeight:900,
-                color:"rgba(255,255,255,.8)",
                 cursor:"pointer",
-                backdropFilter:"blur(10px)",
+                fontFamily:"'Baloo 2',cursive",
+                fontWeight:800,
+                fontSize:".8rem",
                 letterSpacing:".08em",
               }}
             >
-              NICKNAME
+              {vs.nick ? vs.nick.toUpperCase() : 'SET NICK'}
             </button>
             <button
               onClick={() => setWalletMenuOpen(true)}
