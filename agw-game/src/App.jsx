@@ -561,6 +561,12 @@ export default function App() {
     setCurrentGame(game);
   }, [isConnected, login, ensureMenuMusic]);
 
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    const g = currentGame?.id ? String(currentGame.id) : 'hub';
+    try { vs.setGame(g); } catch {}
+  }, [isConnected, address, currentGame?.id]);
+
   // ── Auto-enter after wallet connects ──
   useEffect(() => {
     if (isConnected && pendingGame.current) {
@@ -885,7 +891,11 @@ export default function App() {
   useEffect(() => {
     const win = vsBridgeRef.current?.win;
     if (!win) return;
-    win.postMessage({ type: "LOBBY_USERS", users: vs.lobbyUsers }, "*");
+    const users = Array.isArray(vs.lobbyUsers) ? vs.lobbyUsers : [];
+    const filtered = currentGame?.id === 'chess'
+      ? users.filter(u => String(u?.game || '').toLowerCase() === 'chess')
+      : users;
+    win.postMessage({ type: "LOBBY_USERS", users: filtered }, "*");
   }, [vs.lobbyUsers]);
 
   useEffect(() => {
@@ -1115,7 +1125,12 @@ export default function App() {
 
             const win = iframeRef.current?.contentWindow;
             if (win) {
-              win.postMessage({ type: "LOBBY_USERS", users: vs.lobbyUsers }, "*");
+              try { vs.requestLobbyUsers(); } catch {}
+              const users = Array.isArray(vs.lobbyUsers) ? vs.lobbyUsers : [];
+              const filtered = currentGame?.id === 'chess'
+                ? users.filter(u => String(u?.game || '').toLowerCase() === 'chess')
+                : users;
+              win.postMessage({ type: "LOBBY_USERS", users: filtered }, "*");
             }
           }}
         />

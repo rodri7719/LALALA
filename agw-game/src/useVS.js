@@ -32,6 +32,7 @@ export function useVS(address) {
   const [lastChallengeEvent, setLastChallengeEvent] = useState(null); // { type, ...payload }
   const [weeklyLeaderboard, setWeeklyLeaderboard] = useState(null); // { weeklyKey, top }
   const [lastPaymentRejected, setLastPaymentRejected] = useState(null); // { roomId, reason, ts }
+  const gameRef = useRef('hub');
   const [nick, setNick] = useState(() => {
     try { return localStorage.getItem('pudgy_nick') || ''; } catch (e) { return ''; }
   });
@@ -80,7 +81,7 @@ export function useVS(address) {
         console.log('[useVS] WebSocket connected');
         failedReconnects.current = 0;
         setConnected(true);
-        socket.send(JSON.stringify({ type: 'register', address, nick }));
+        socket.send(JSON.stringify({ type: 'register', address, nick, game: gameRef.current || 'hub' }));
         console.log('[useVS] Registered with address:', address);
 
         socket.send(JSON.stringify({ type: 'get_weekly_leaderboard' }));
@@ -98,6 +99,20 @@ export function useVS(address) {
 
         socket._pingInterval = pingInterval;
       };
+
+  const setGame = (game) => {
+    const g = String(game || 'hub');
+    gameRef.current = g;
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'set_game', game: g }));
+    }
+  };
+
+  const requestLobbyUsers = () => {
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ type: 'get_lobby_users' }));
+    }
+  };
 
       socket.onmessage = (event) => {
         try {
@@ -355,6 +370,8 @@ export function useVS(address) {
     respondChallenge,
     addWeeklyPoints,
     requestWeeklyLeaderboard,
+    setGame,
+    requestLobbyUsers,
     setNickname,
   };
 }

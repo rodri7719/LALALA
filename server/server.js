@@ -143,7 +143,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-const clients = new Map(); // socket -> { id, address, state, room, lastPing }
+const clients = new Map(); // socket -> { id, address, state, room, lastPing, ip, game }
 const queue = new Set(); // waiting for match
 const rooms = new Map(); // roomId -> { p1, p2, state, seed, startTime }
 const credits = new Map(); // address -> number of paid credits usable for future matches
@@ -283,7 +283,7 @@ function getLobbyUsers() {
     if (!c.address) continue;
     const a = String(c.address || '').toLowerCase();
     if (!a) continue;
-    byAddr.set(a, { address: a, nick: getNick(a) });
+    byAddr.set(a, { address: a, nick: getNick(a), game: c.game || null });
   }
   return Array.from(byAddr.values());
 }
@@ -481,6 +481,7 @@ wss.on('connection', (socket, req) => {
     state: 'idle',
     room: null,
     lastPing: Date.now(),
+    game: null,
   });
 
   console.log(`[CONNECTION] New client connected. ID: ${clientId}. Total clients: ${clients.size}`);
@@ -512,6 +513,7 @@ wss.on('connection', (socket, req) => {
       switch (msg.type) {
         case 'register':
           client.address = String(msg.address || '').toLowerCase();
+          client.game = String(msg.game || client.game || 'hub');
           {
             const nn = normNick(msg.nick);
             if (nn) nicks.set(client.address, nn);
@@ -532,6 +534,20 @@ wss.on('connection', (socket, req) => {
           broadcast(socket, 'registered', { address: client.address });
           console.log(`[REGISTER] ${msg.address} - Total clients: ${clients.size}`);
           broadcastLobbyUsers();
+          break;
+
+        case 'set_game':
+          {
+            if (!client.address) return;
+            client.game = String(msg.game || 'hub');
+            broadcastLobbyUsers();
+          }
+          break;
+
+        case 'get_lobby_users':
+          {
+            broadcast(socket, 'lobby_users', { users: getLobbyUsers() });
+          }
           break;
 
         case 'set_nick':
@@ -851,10 +867,6 @@ setInterval(() => {
     }
   });
 }, 10000);
-
-setInterval(() => {
-  broadcastLobbyUsers();
-}, 5000);
 
 setInterval(() => {
   const now = Date.now();
