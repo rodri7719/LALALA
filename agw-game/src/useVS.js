@@ -180,8 +180,13 @@ export function useVS(address) {
         }
       };
 
-      socket.onclose = () => {
-        console.log('[useVS] WebSocket closed');
+      socket.onclose = (ev) => {
+        console.log('[useVS] WebSocket closed', {
+          code: ev?.code,
+          reason: ev?.reason,
+          wasClean: ev?.wasClean,
+          url: WS_URL,
+        });
         setConnected(false);
         if (socket._pingInterval) clearInterval(socket._pingInterval);
         if (!activeRef.current) return;
@@ -199,6 +204,7 @@ export function useVS(address) {
           console.warn('[useVS] WebSocket error (server likely offline).');
           console.warn('[useVS] WS URL:', WS_URL);
         }
+        console.warn('[useVS] WebSocket error event:', err);
       };
     };
 

@@ -459,12 +459,14 @@ wss.on('connection', (socket, req) => {
   const ip = req ? getReqIp(req) : 'unknown';
   const origin = req?.headers?.origin;
   if (!isOriginAllowed(origin)) {
+    console.log('[WS] rejected connection (origin not allowed)', { ip, origin });
     try { socket.close(); } catch (e) {}
     return;
   }
 
   const nConns = wsConnInc(ip);
   if (Number.isFinite(WS_MAX_CONNECTIONS_PER_IP) && nConns > WS_MAX_CONNECTIONS_PER_IP) {
+    console.log('[WS] rejected connection (too many connections)', { ip, nConns, max: WS_MAX_CONNECTIONS_PER_IP });
     wsConnDec(ip);
     try { socket.close(); } catch (e) {}
     return;
@@ -490,11 +492,13 @@ wss.on('connection', (socket, req) => {
     try {
       const b = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ''));
       if (b.length > WS_MAX_MSG_BYTES) {
+        console.log('[WS] closing socket (message too large)', { ip, bytes: b.length, max: WS_MAX_MSG_BYTES });
         try { socket.close(); } catch (e) {}
         return;
       }
 
       if (!wsRateAllow(ip)) {
+        console.log('[WS] closing socket (rate limit)', { ip, windowMs: WS_RATE_WINDOW_MS, maxMsgs: WS_RATE_MAX_MSGS });
         try { socket.close(); } catch (e) {}
         return;
       }
