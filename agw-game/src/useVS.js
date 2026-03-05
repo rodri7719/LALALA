@@ -185,10 +185,12 @@ export function useVS(address) {
               setLastOpponentEvent({ type: msg.type, ...msg });
               setVsState('idle');
               setMatchData(null);
+              lastPaymentTxSentRef.current = null;
               break;
             case 'cancelled':
               setVsState('idle');
               setMatchData(null);
+              lastPaymentTxSentRef.current = null;
               break;
 
             case 'chess_move':
@@ -357,6 +359,12 @@ export function useVS(address) {
     }
   };
 
+  const leaveRoom = () => {
+    if (wsRef.current && wsRef.current.readyState === 1 && (vsState === 'matched' || vsState === 'playing')) {
+      wsRef.current.send(JSON.stringify({ type: 'leave_room' }));
+    }
+  };
+
   const sendLobbyChat = (text) => {
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(JSON.stringify({ type: 'lobby_chat', text }));
@@ -413,6 +421,7 @@ export function useVS(address) {
     sendChat,
     resign,
     cancelMatch,
+    leaveRoom,
     sendLobbyChat,
     challenge,
     respondChallenge,

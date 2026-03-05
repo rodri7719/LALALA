@@ -274,7 +274,7 @@ body {
 #t-status { font-family: 'Crimson Text', serif; font-size: 1.1rem; color: var(--muted); line-height: 1.5; min-height: 24px; font-style: italic; }
 .d-badge  { font-family: 'Cinzel', serif; font-size: .82rem; letter-spacing: 3px; color: var(--gold2); border: 1px solid var(--gold); border-radius: 6px; padding: 7px 14px; text-transform: uppercase; display: inline-block; background: rgba(196,160,64,.05); }
 
-#move-log { max-height: 140px; overflow-y: auto; font-family: 'Crimson Text', serif; font-size: .9rem; color: var(--muted); line-height: 2; scrollbar-width: thin; scrollbar-color: var(--bdr) transparent; }
+#move-log { height: 140px; overflow-y: auto; font-family: 'Crimson Text', serif; font-size: .9rem; color: var(--muted); line-height: 2; scrollbar-width: thin; scrollbar-color: var(--bdr) transparent; }
 #move-log .wm { color: var(--ivory); font-weight: 600; }
 #move-log .bm { color: var(--sage); }
 #move-log .mn { color: var(--bdr2); font-size: .74rem; font-family: 'Cinzel', serif; }
@@ -1617,6 +1617,7 @@ let _myVsSide = 'w';
 let _clockTimer = null;
 let _clockEnabled = false;
 let _msLeftW = 600000;
+let _vsLeaveSent = false;
 let _msLeftB = 600000;
 let _lastServerTs = null;
 let _activeClock = 'w';
@@ -2189,7 +2190,7 @@ function closeMenuConfirm() {
 function confirmGoMenu() {
   closeMenuConfirm();
   if (VS_PLAYER) {
-    window.parent.postMessage({ type: 'VS_RESIGN' }, '*');
+    window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*');
   }
   goMenu();
 }
@@ -2572,22 +2573,27 @@ function checkGameOver() {
     if (youWin) scoreAdd(typeof VS_PLAYER === 'boolean' && VS_PLAYER ? 'Player' : 'Bot');
     setStatus('Checkmate.');
     setTurnUI(youWin ? 'w' : 'b');
+    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_stalemate()) {
     endOverlayShow('⚖️', 'STALEMATE', 'No legal moves — draw by stalemate.');
+    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.insufficient_material()) {
     endOverlayShow('🤝', 'DRAW', 'Insufficient material to checkmate.');
+    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_threefold_repetition()) {
     endOverlayShow('🔁', 'DRAW', 'Draw by threefold repetition.');
+    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_draw()) {
     endOverlayShow('🤝', 'DRAW', 'The game ends in a draw.');
+    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   /* not over — update status */

@@ -809,7 +809,11 @@ export default function App() {
       }
 
       if (e.data?.type === "VS_RESIGN") {
-        vs.resign();
+        try { vs.resign(); } catch {}
+      }
+
+      if (e.data?.type === "VS_LEAVE_ROOM") {
+        try { vs.leaveRoom(); } catch {}
       }
 
       if (e.data?.type === "VS_CANCEL_MATCH") {
@@ -853,6 +857,17 @@ export default function App() {
     return () => window.removeEventListener("message", onMsg);
   }, [sendTransaction, isPending, currentGame, vs, address, addLocalWeeklyPoints]);
 
+  useEffect(() => {
+    if (vs?.vsState === 'idle') {
+      pendingVsPaymentTxHashRef.current = null;
+    }
+  }, [vs?.vsState]);
+
+  useEffect(() => {
+    if (currentGame?.id !== 'chess') {
+      pendingVsPaymentTxHashRef.current = null;
+    }
+  }, [currentGame?.id]);
 
   useEffect(() => {
     const win = vsBridgeRef.current?.win;

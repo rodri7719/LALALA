@@ -316,8 +316,8 @@ function cleanupRoom(roomId) {
   const p2Socket = getSocketByAddress(room.p2);
   const p1 = p1Socket ? clients.get(p1Socket) : null;
   const p2 = p2Socket ? clients.get(p2Socket) : null;
-  if (p1) p1.room = null;
-  if (p2) p2.room = null;
+  if (p1) { p1.room = null; if (p1.state !== 'finding') p1.state = 'idle'; }
+  if (p2) { p2.room = null; if (p2.state !== 'finding') p2.state = 'idle'; }
   rooms.delete(roomId);
   broadcastStats();
 }
@@ -840,6 +840,28 @@ wss.on('connection', (socket, req) => {
               requeueSocket(opponentSocket);
             }
             cleanupRoom(client.room);
+          }
+          break;
+
+        case 'leave_room':
+          {
+            const roomId = client.room;
+            const room = rooms.get(roomId);
+            if (!room) {
+              client.state = 'idle';
+              client.room = null;
+              return;
+            }
+
+            const opponentAddr = client.address === room.p1 ? room.p2 : room.p1;
+            const opponentSocket = getSocketByAddress(opponentAddr);
+            if (opponentSocket) {
+              broadcast(opponentSocket, 'game_over', { result: 'draw', reason: 'room_closed', opponent: client.address });
+            }
+
+            broadcast(socket, 'game_over', { result: 'draw', reason: 'room_closed', opponent: opponentAddr });
+            cleanupRoom(roomId);
+            broadcastLobbyUsers();
           }
           break;
 
