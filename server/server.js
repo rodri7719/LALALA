@@ -646,18 +646,22 @@ wss.on('connection', (socket, req) => {
             if (!to) return;
             const targetSocket = getSocketByAddress(to);
             if (!targetSocket) {
+              console.log('[CHALLENGE] target not online', { from: client.address, to });
               broadcast(socket, 'challenge_error', { reason: 'not_online', to });
               return;
             }
             const targetClient = clients.get(targetSocket);
             if (!targetClient || targetClient.state !== 'idle') {
+              console.log('[CHALLENGE] target busy', { from: client.address, to, targetState: targetClient?.state || null });
               broadcast(socket, 'challenge_error', { reason: 'busy', to });
               return;
             }
             if (client.state !== 'idle') {
+              console.log('[CHALLENGE] challenger busy', { from: client.address, to, fromState: client.state });
               broadcast(socket, 'challenge_error', { reason: 'you_busy', to });
               return;
             }
+            console.log('[CHALLENGE] invite sent', { from: client.address, to });
             broadcast(targetSocket, 'challenge_invite', { from: client.address, fromNick: getNick(client.address) });
             broadcast(socket, 'challenge_sent', { to });
           }
