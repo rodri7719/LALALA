@@ -1917,7 +1917,10 @@ window.addEventListener('message',(e)=>{
     if (!ev?.type) return;
     if (ev.type === 'challenge_sent') lobbySetStatus('Challenge sent…');
     if (ev.type === 'challenge_rejected') lobbySetStatus('Challenge rejected.');
-    if (ev.type === 'challenge_error') lobbySetStatus('Challenge failed.');
+    if (ev.type === 'challenge_error') {
+      const r = String(ev.reason || ev?.data?.reason || '').trim();
+      lobbySetStatus(r ? ('Challenge failed: ' + r) : 'Challenge failed.');
+    }
   }
 
   if(e.data?.type==='VS_FINDING'){
@@ -2410,7 +2413,6 @@ function doPlayerMove(from, to) {
 function applyOpponentMove(uci) {
   if (!VS_PLAYER) return;
   if (!GAME || !BOARD || GAME.game_over()) { THINKING = false; return; }
-  if (GAME.turn() === PLAYER_SIDE) return;
   const from  = uci.slice(0, 2);
   const to    = uci.slice(2, 4);
   const promo = uci[4] || 'q';
@@ -2600,6 +2602,7 @@ function checkGameOver() {
 function logMove(san, col) {
   MOVE_LIST.push({ san, col });
   const el = document.getElementById('move-log');
+  const nearBottom = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 12);
   let html = '';
   /* Group moves in pairs, but use col to determine visual class */
   for (let i = 0; i < MOVE_LIST.length; i += 2) {
@@ -2610,7 +2613,7 @@ function logMove(san, col) {
     html += `<div><span class="mn">${n}.</span> <span class="${cls1}">${m1.san}</span>${m2 ? ` <span class="${cls2}">${m2.san}</span>` : ''}</div>`;
   }
   el.innerHTML = html;
-  el.scrollTop = el.scrollHeight;
+  if (nearBottom) el.scrollTop = el.scrollHeight;
 }
 
 function endOverlayShow(icon, ttl, sub) {
