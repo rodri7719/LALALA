@@ -1607,6 +1607,36 @@ function randomizeOddsAndWinPct() {
     dog.odds = Math.round(Math.min(maxO, dogO) * 10) / 10;
   }catch(e){}
 
+  // Final: spread the field a bit more so odds aren't all ~x4.1/x4.2.
+  // Keep favorites tighter and give underdogs more separation.
+  try{
+    const ord = [...HORSES].sort((a,b)=>Number(a.odds)-Number(b.odds));
+    const lo = Math.max(minO, regime === 'tight' ? 1.4 : 1.6);
+    const hi = maxO;
+    const span = Math.max(0.6, hi - lo);
+    const pow = (regime === 'tight') ? 1.05 : (regime === 'mixed' ? 0.95 : 0.9);
+    ord.forEach((h, idx) => {
+      const t = (ord.length <= 1) ? 0 : (idx / (ord.length - 1));
+      const tt = Math.pow(t, pow);
+      const v = lo + span * tt;
+      const jitter = (idx === 0 || idx === ord.length-1) ? 0 : (-0.05 + Math.random()*0.10);
+      h.odds = Math.round(Math.max(minO, Math.min(maxO, v + jitter)) * 10) / 10;
+    });
+
+    // Re-run uniqueness guard lightly (max 2 duplicates).
+    const used = new Map();
+    for (const h of HORSES) {
+      let o = Number(h.odds);
+      let k = used.get(o) || 0;
+      while (k >= 2) {
+        o = Math.round(Math.min(maxO, o + 0.1) * 10) / 10;
+        k = used.get(o) || 0;
+      }
+      used.set(o, (used.get(o) || 0) + 1);
+      h.odds = o;
+    }
+  }catch(e){}
+
   // Recompute implied win% from odds
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
   const t = w.reduce((a,b)=>a+b,0) || 1;

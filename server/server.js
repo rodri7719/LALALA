@@ -460,7 +460,7 @@ wss.on('connection', (socket, req) => {
   const origin = req?.headers?.origin;
   if (!isOriginAllowed(origin)) {
     console.log('[WS] rejected connection (origin not allowed)', { ip, origin });
-    try { socket.close(); } catch (e) {}
+    try { socket.close(1008, 'origin_not_allowed'); } catch (e) {}
     return;
   }
 
@@ -468,7 +468,7 @@ wss.on('connection', (socket, req) => {
   if (Number.isFinite(WS_MAX_CONNECTIONS_PER_IP) && nConns > WS_MAX_CONNECTIONS_PER_IP) {
     console.log('[WS] rejected connection (too many connections)', { ip, nConns, max: WS_MAX_CONNECTIONS_PER_IP });
     wsConnDec(ip);
-    try { socket.close(); } catch (e) {}
+    try { socket.close(1013, 'too_many_connections'); } catch (e) {}
     return;
   }
 
@@ -494,13 +494,13 @@ wss.on('connection', (socket, req) => {
       const b = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ''));
       if (b.length > WS_MAX_MSG_BYTES) {
         console.log('[WS] closing socket (message too large)', { ip, bytes: b.length, max: WS_MAX_MSG_BYTES });
-        try { socket.close(); } catch (e) {}
+        try { socket.close(1009, 'message_too_large'); } catch (e) {}
         return;
       }
 
       if (!wsRateAllow(ip)) {
         console.log('[WS] closing socket (rate limit)', { ip, windowMs: WS_RATE_WINDOW_MS, maxMsgs: WS_RATE_MAX_MSGS });
-        try { socket.close(); } catch (e) {}
+        try { socket.close(1013, 'rate_limited'); } catch (e) {}
         return;
       }
 
@@ -527,7 +527,7 @@ wss.on('connection', (socket, req) => {
             if (String(c.address).toLowerCase() !== client.address) continue;
             try {
               console.log(`[DEDUP] Closing previous socket for ${client.address} (id=${c.id})`);
-              s.close();
+              s.close(4000, 'dedup_same_wallet');
             } catch (e) {}
           }
 
