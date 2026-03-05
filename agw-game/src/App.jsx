@@ -7,7 +7,7 @@
 // 3. useSendTransaction (wagmi) → to send transactions from AGW wallet
 // 4. AbstractWalletProvider handles WagmiProvider + QueryClientProvider internally
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useLoginWithAbstract } from "@abstract-foundation/agw-react";
 import { useAccount, useDisconnect, useSendTransaction } from "wagmi";
 import { parseEther, encodeFunctionData } from "viem";
