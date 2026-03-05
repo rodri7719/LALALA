@@ -337,7 +337,9 @@ export default function App() {
   const vsBridgeRef = useRef({ win: null, gameId: null });
   const iframeRef                     = useRef(null);
   const pendingGame                   = useRef(null); // game to launch after wallet connects
-  const lastPaymentTxHashRef          = useRef(null);
+  const pendingNick                  = useRef(null);
+  const lastPaymentTxHashRef         = useRef(null);
+  const pendingVsPaymentTxHashRef    = useRef(null);
 
   const [weeklyLocalVer, setWeeklyLocalVer] = useState(0);
 
@@ -751,13 +753,16 @@ export default function App() {
               // as soon as both players have paid (don't rely on iframe timing).
               try {
                 const txHash = lastPaymentTxHashRef.current;
+                if (txHash) pendingVsPaymentTxHashRef.current = txHash;
                 if (currentGame?.id === 'chess' && vs?.vsState === 'matched' && vs?.matchData?.roomId && txHash) {
                   vs.confirmPayment(txHash);
+                  pendingVsPaymentTxHashRef.current = null;
                 }
               } catch {}
             },
             onError: (err) => {
               lastPaymentTxHashRef.current = null;
+              pendingVsPaymentTxHashRef.current = null;
               const msg = err?.shortMessage || err?.message || "Rejected";
               iframeRef.current?.contentWindow?.postMessage({ type:"AGW_TX_ERROR", msg }, "*");
             },
@@ -878,6 +883,19 @@ export default function App() {
       }
     }
   }, [vs.vsState, vs.matchData]);
+
+  // If tx succeeded before VS reached 'matched', confirm as soon as roomId exists.
+  useEffect(() => {
+    try {
+      const txHash = pendingVsPaymentTxHashRef.current;
+      if (!txHash) return;
+      if (currentGame?.id !== 'chess') return;
+      if (vs?.vsState !== 'matched') return;
+      if (!vs?.matchData?.roomId) return;
+      vs.confirmPayment(txHash);
+      pendingVsPaymentTxHashRef.current = null;
+    } catch {}
+  }, [currentGame?.id, vs?.vsState, vs?.matchData?.roomId, vs]);
 
   useEffect(() => {
     const win = vsBridgeRef.current?.win;
