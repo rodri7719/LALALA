@@ -537,13 +537,17 @@ wss.on('connection', (socket, req) => {
         return;
       }
 
-      if (!wsRateAllow(ip)) {
-        console.log('[WS] closing socket (rate limit)', { ip, windowMs: WS_RATE_WINDOW_MS, maxMsgs: WS_RATE_MAX_MSGS });
-        try { socket.close(1013, 'rate_limited'); } catch (e) {}
-        return;
-      }
-
       const msg = JSON.parse(raw.toString());
+
+      // Rate limit only "heavy" messages. Polling + ping must not disconnect users.
+      const SAFE_TYPES = new Set(['ping', 'get_lobby_users', 'get_weekly_leaderboard', 'set_game']);
+      if (!SAFE_TYPES.has(String(msg?.type || ''))) {
+        if (!wsRateAllow(ip)) {
+          console.log('[WS] closing socket (rate limit)', { ip, type: msg?.type, windowMs: WS_RATE_WINDOW_MS, maxMsgs: WS_RATE_MAX_MSGS });
+          try { socket.close(1013, 'rate_limited'); } catch (e) {}
+          return;
+        }
+      }
       const client = clients.get(socket);
       if (!client) return;
 

@@ -124,7 +124,7 @@ export function useVS(address) {
           try {
             if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'get_lobby_users' }));
           } catch (e) {}
-        }, 5000);
+        }, 10000);
       };
       socket.onmessage = (event) => {
         try {
@@ -226,13 +226,16 @@ export function useVS(address) {
           return;
         }
 
+        // If we were rate limited, back off harder to avoid a reconnect storm.
+        const rateLimited = (ev?.code === 1013 && String(ev?.reason || '') === 'rate_limited');
+
         if (!activeRef.current) return;
         failedReconnects.current = (failedReconnects.current || 0) + 1;
         reconnectTimer.current = setTimeout(() => {
           if (!activeRef.current) return;
           console.log('[useVS] Reconnecting...');
           connect();
-        }, 3000);
+        }, rateLimited ? 15000 : 3000);
       };
 
       socket.onerror = (err) => {
