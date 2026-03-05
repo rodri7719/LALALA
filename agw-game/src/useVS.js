@@ -19,6 +19,7 @@ export function useVS(address) {
   const failedReconnects = useRef(0);
   const loggedWsError = useRef(false);
   const lobbyPollRef = useRef(null);
+  const lastSentGameRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState({ online: 0, inQueue: 0, inMatches: 0 });
   const [vsState, setVsState] = useState('idle');
@@ -43,8 +44,10 @@ export function useVS(address) {
   const setGame = (game) => {
     const g = String(game || 'hub');
     gameRef.current = g;
+    if (lastSentGameRef.current === g) return;
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(JSON.stringify({ type: 'set_game', game: g }));
+      lastSentGameRef.current = g;
     }
   };
 
@@ -91,6 +94,9 @@ export function useVS(address) {
       if (failedReconnects.current >= 6) {
         return;
       }
+      if (wsRef.current && (wsRef.current.readyState === 0 || wsRef.current.readyState === 1)) {
+        return;
+      }
       const socket = new WebSocket(WS_URL);
       wsRef.current = socket;
 
@@ -100,6 +106,14 @@ export function useVS(address) {
         setConnected(true);
         socket.send(JSON.stringify({ type: 'register', address, nick, game: gameRef.current || 'hub' }));
         console.log('[useVS] Registered with address:', address);
+
+        // Reset so we can re-assert game after reconnect.
+        lastSentGameRef.current = null;
+        try {
+          const g = String(gameRef.current || 'hub');
+          socket.send(JSON.stringify({ type: 'set_game', game: g }));
+          lastSentGameRef.current = g;
+        } catch (e) {}
 
         // Grab initial snapshots so embedded games (like chess) always get users.
         socket.send(JSON.stringify({ type: 'get_lobby_users' }));
@@ -273,6 +287,9 @@ export function useVS(address) {
 
   const findMatch = () => {
     console.log('[useVS] findMatch called, ws state:', wsRef.current?.readyState);
+    if (vsState !== 'idle') {
+      return;
+    }
     if (wsRef.current && wsRef.current.readyState === 1) {
       console.log('[useVS] Sending find_match message');
       wsRef.current.send(JSON.stringify({ type: 'find_match' }));

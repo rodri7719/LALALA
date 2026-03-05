@@ -517,6 +517,7 @@ wss.on('connection', (socket, req) => {
     id: clientId,
     address: null,
     ip,
+    origin: String(origin || ''),
     state: 'idle',
     room: null,
     lastPing: Date.now(),
@@ -565,6 +566,14 @@ wss.on('connection', (socket, req) => {
             client.address = addr;
             client.game = String(msg.game || client.game || 'hub');
           }
+          console.log('[REGISTER] normalized', {
+            raw: msg.address,
+            norm: client.address,
+            id: client.id,
+            ip: client.ip,
+            origin: client.origin,
+            game: client.game,
+          });
           {
             const nn = normNick(msg.nick);
             if (nn) nicks.set(client.address, nn);
@@ -578,7 +587,14 @@ wss.on('connection', (socket, req) => {
             if (!otherAddr) continue;
             if (otherAddr !== client.address) continue;
             try {
-              console.log(`[DEDUP] Closing previous socket for ${client.address} (prevId=${c.id}, newId=${client.id})`);
+              console.log(`[DEDUP] Closing previous socket for ${client.address}`, {
+                prevId: c.id,
+                prevIp: c.ip,
+                prevOrigin: c.origin,
+                newId: client.id,
+                newIp: client.ip,
+                newOrigin: client.origin,
+              });
               s.close(4000, 'dedup_same_wallet');
             } catch (e) {}
           }

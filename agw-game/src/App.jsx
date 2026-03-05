@@ -873,6 +873,13 @@ export default function App() {
   useEffect(() => {
     const win = vsBridgeRef.current?.win;
     if (!win) return;
+    if (!vs.lastPaymentRejected?.ts) return;
+    win.postMessage({ type: "VS_PAYMENT_REJECTED", roomId: vs.lastPaymentRejected.roomId, reason: vs.lastPaymentRejected.reason }, "*");
+  }, [vs.lastPaymentRejected]);
+
+  useEffect(() => {
+    const win = vsBridgeRef.current?.win;
+    if (!win) return;
     if (!vs.lastChessMove?.uci) return;
     win.postMessage({ type: "VS_CHESS_MOVE", uci: vs.lastChessMove.uci, from: vs.lastChessMove.from, ts: vs.lastChessMove.ts }, "*");
   }, [vs.lastChessMove]);

@@ -2008,6 +2008,18 @@ window.addEventListener('message',(e)=>{
     }
   }
 
+  if (e.data?.type === 'VS_PAYMENT_REJECTED') {
+    const reason = String(e.data?.reason || 'rejected');
+    _vsPaid = false;
+    _vsWaitingStart = false;
+    setPayStatus('Payment rejected: ' + reason, '#ff6b6b');
+    lobbySetStatus('Payment rejected.');
+    const btn = document.getElementById('pay-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    try { showPayOverlay('start'); } catch (e) {}
+    return;
+  }
+
   if (e.data?.type === 'VS_OPPONENT_EVENT') {
     const ev = e.data?.event;
     if (!ev?.type) return;
