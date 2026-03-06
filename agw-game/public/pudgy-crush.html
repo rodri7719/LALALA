@@ -28,9 +28,17 @@ body.lowq #fx-layer{display:none!important;}
 body.lowq #screen-fx{display:none!important;}
 body.lowq #abstract-bg{display:none!important;}
 body.lowq .aurora,body.lowq .aurora2{display:none!important;}
+body.lowq{--cell:clamp(38px,10vmin,54px);}
+body.lowq #game-area{flex-direction:column!important;gap:6px!important;padding:2px 6px!important;}
+body.lowq #peng-panel{display:none!important;}
+body.lowq #board-col{max-width:calc(var(--cell)*8 + var(--gap)*7 + 12px)!important;}
+body.lowq #bwrap{transform:none!important;}
 body.lowq .piece{filter:none!important;box-shadow:none!important;}
 body.lowq .piece.pw-bomb,body.lowq .piece.pw-zap,body.lowq .piece.pw-bliz,body.lowq .piece.pw-mega{box-shadow:none!important;}
 body.lowq header,body.lowq #missions-bar{backdrop-filter:none!important;}
+body.lowq .piece,body.lowq .cell,body.lowq #announce,body.lowq #combo{animation:none!important;transition:none!important;}
+body.lowq .cell.hint .piece{animation:none!important;}
+body.lowq #app.shake{animation:none!important;}
 
 /* BG */
 #bg-layer{position:fixed;inset:0;z-index:0;overflow:hidden;
