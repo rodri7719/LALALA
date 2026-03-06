@@ -274,7 +274,7 @@ body {
 #t-status { font-family: 'Crimson Text', serif; font-size: 1.1rem; color: var(--muted); line-height: 1.5; min-height: 24px; font-style: italic; }
 .d-badge  { font-family: 'Cinzel', serif; font-size: .82rem; letter-spacing: 3px; color: var(--gold2); border: 1px solid var(--gold); border-radius: 6px; padding: 7px 14px; text-transform: uppercase; display: inline-block; background: rgba(196,160,64,.05); }
 
-#move-log { height: 140px; overflow-y: auto; font-family: 'Crimson Text', serif; font-size: .9rem; color: var(--muted); line-height: 2; scrollbar-width: thin; scrollbar-color: var(--bdr) transparent; }
+#move-log { max-height: 140px; overflow-y: auto; font-family: 'Crimson Text', serif; font-size: .9rem; color: var(--muted); line-height: 2; scrollbar-width: thin; scrollbar-color: var(--bdr) transparent; }
 #move-log .wm { color: var(--ivory); font-weight: 600; }
 #move-log .bm { color: var(--sage); }
 #move-log .mn { color: var(--bdr2); font-size: .74rem; font-family: 'Cinzel', serif; }
@@ -1617,7 +1617,6 @@ let _myVsSide = 'w';
 let _clockTimer = null;
 let _clockEnabled = false;
 let _msLeftW = 600000;
-let _vsLeaveSent = false;
 let _msLeftB = 600000;
 let _lastServerTs = null;
 let _activeClock = 'w';
@@ -1918,10 +1917,7 @@ window.addEventListener('message',(e)=>{
     if (!ev?.type) return;
     if (ev.type === 'challenge_sent') lobbySetStatus('Challenge sent…');
     if (ev.type === 'challenge_rejected') lobbySetStatus('Challenge rejected.');
-    if (ev.type === 'challenge_error') {
-      const r = String(ev.reason || ev?.data?.reason || '').trim();
-      lobbySetStatus(r ? ('Challenge failed: ' + r) : 'Challenge failed.');
-    }
+    if (ev.type === 'challenge_error') lobbySetStatus('Challenge failed.');
   }
 
   if(e.data?.type==='VS_FINDING'){
@@ -2010,18 +2006,6 @@ window.addEventListener('message',(e)=>{
     if (_vsPaid) {
       setPayStatus('Confirmed! Waiting for opponent…', '#48c47e');
     }
-  }
-
-  if (e.data?.type === 'VS_PAYMENT_REJECTED') {
-    const reason = String(e.data?.reason || 'rejected');
-    _vsPaid = false;
-    _vsWaitingStart = false;
-    setPayStatus('Payment rejected: ' + reason, '#ff6b6b');
-    lobbySetStatus('Payment rejected.');
-    const btn = document.getElementById('pay-btn');
-    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
-    try { showPayOverlay('start'); } catch (e) {}
-    return;
   }
 
   if (e.data?.type === 'VS_OPPONENT_EVENT') {
@@ -2190,7 +2174,7 @@ function closeMenuConfirm() {
 function confirmGoMenu() {
   closeMenuConfirm();
   if (VS_PLAYER) {
-    window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*');
+    window.parent.postMessage({ type: 'VS_RESIGN' }, '*');
   }
   goMenu();
 }
@@ -2414,6 +2398,7 @@ function doPlayerMove(from, to) {
 function applyOpponentMove(uci) {
   if (!VS_PLAYER) return;
   if (!GAME || !BOARD || GAME.game_over()) { THINKING = false; return; }
+  if (GAME.turn() === PLAYER_SIDE) return;
   const from  = uci.slice(0, 2);
   const to    = uci.slice(2, 4);
   const promo = uci[4] || 'q';
@@ -2573,27 +2558,22 @@ function checkGameOver() {
     if (youWin) scoreAdd(typeof VS_PLAYER === 'boolean' && VS_PLAYER ? 'Player' : 'Bot');
     setStatus('Checkmate.');
     setTurnUI(youWin ? 'w' : 'b');
-    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_stalemate()) {
     endOverlayShow('⚖️', 'STALEMATE', 'No legal moves — draw by stalemate.');
-    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.insufficient_material()) {
     endOverlayShow('🤝', 'DRAW', 'Insufficient material to checkmate.');
-    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_threefold_repetition()) {
     endOverlayShow('🔁', 'DRAW', 'Draw by threefold repetition.');
-    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   if (GAME.in_draw()) {
     endOverlayShow('🤝', 'DRAW', 'The game ends in a draw.');
-    if (VS_PLAYER && !_vsLeaveSent) { _vsLeaveSent = true; try { window.parent.postMessage({ type: 'VS_LEAVE_ROOM' }, '*'); } catch (e) {} }
     return true;
   }
   /* not over — update status */
@@ -2608,7 +2588,6 @@ function checkGameOver() {
 function logMove(san, col) {
   MOVE_LIST.push({ san, col });
   const el = document.getElementById('move-log');
-  const nearBottom = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 12);
   let html = '';
   /* Group moves in pairs, but use col to determine visual class */
   for (let i = 0; i < MOVE_LIST.length; i += 2) {
@@ -2619,7 +2598,7 @@ function logMove(san, col) {
     html += `<div><span class="mn">${n}.</span> <span class="${cls1}">${m1.san}</span>${m2 ? ` <span class="${cls2}">${m2.san}</span>` : ''}</div>`;
   }
   el.innerHTML = html;
-  if (nearBottom) el.scrollTop = el.scrollHeight;
+  el.scrollTop = el.scrollHeight;
 }
 
 function endOverlayShow(icon, ttl, sub) {

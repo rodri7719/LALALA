@@ -2,6 +2,8 @@ import http from 'http';
 import { WebSocketServer } from 'ws';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { createClient } from 'redis';
 
 const PORT = Number(process.env.PORT || 8787);
 const ALLOWED_ORIGINS = String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -153,6 +155,32 @@ const weeklyScores = new Map(); // address -> { points, nick, updatedAt }
 const DATA_DIR = path.join(process.cwd(), 'data');
 const WEEKLY_FILE = path.join(DATA_DIR, 'weekly-leaderboard.json');
 
+const REDIS_URL = String(process.env.REDIS_URL || '').trim();
+let redis = null;
+
+async function initRedis() {
+  if (!REDIS_URL) return;
+  try {
+    redis = createClient({ url: REDIS_URL });
+    redis.on('error', (e) => console.warn('[REDIS] error', String(e?.message || e)));
+    await redis.connect();
+    console.log('[REDIS] connected');
+  } catch (e) {
+    console.warn('[REDIS] connect failed, falling back to file storage', String(e?.message || e));
+    redis = null;
+  }
+}
+
+function redisWeeklyKeyKey() {
+  return 'weekly:key';
+}
+function redisWeeklyScoresKey(k) {
+  return `weekly:zset:${k}`;
+}
+function redisWeeklyNicksKey(k) {
+  return `weekly:nicks:${k}`;
+}
+
 function friday00UtcWeekKey(ts = Date.now()) {
   const d = new Date(ts);
   const day = d.getUTCDay();
@@ -164,8 +192,22 @@ function friday00UtcWeekKey(ts = Date.now()) {
 
 let weeklyKey = friday00UtcWeekKey();
 
-function weeklyResetIfNeeded() {
+async function weeklyResetIfNeeded() {
   const k = friday00UtcWeekKey();
+  if (redis) {
+    try {
+      const cur = (await redis.get(redisWeeklyKeyKey())) || '';
+      if (String(cur) !== String(k)) {
+        await redis.set(redisWeeklyKeyKey(), String(k));
+      }
+      weeklyKey = k;
+      return;
+    } catch (e) {
+      console.warn('[WEEKLY] redis reset check failed, falling back to file', String(e?.message || e));
+      redis = null;
+    }
+  }
+
   if (k === weeklyKey) return;
   weeklyKey = k;
   weeklyScores.clear();
@@ -211,17 +253,42 @@ function weeklyLoad() {
   }
 }
 
-weeklyLoad();
+// Initialize persistence (Redis preferred, file fallback)
+await initRedis();
+if (!redis) weeklyLoad();
 
-function getWeeklyTop10() {
-  weeklyResetIfNeeded();
+async function getWeeklyTop10() {
+  await weeklyResetIfNeeded();
+  const k = weeklyKey;
+
+  if (redis) {
+    try {
+      const key = redisWeeklyScoresKey(k);
+      const arr = await redis.zRange(key, 0, 9, { REV: true, WITHSCORES: true });
+      const nickKey = redisWeeklyNicksKey(k);
+      const rows = [];
+      for (const it of arr) {
+        const address = String(it.value || '').toLowerCase();
+        const points = Number(it.score || 0) || 0;
+        let nick = null;
+        try { nick = await redis.hGet(nickKey, address); } catch {}
+        rows.push({ address, points, nick: nick || getNick(address) || null });
+      }
+      return rows;
+    } catch (e) {
+      console.warn('[WEEKLY] redis get top failed, falling back to file', String(e?.message || e));
+      redis = null;
+    }
+  }
+
   const rows = Array.from(weeklyScores.entries()).map(([address, v]) => ({ address, points: v.points || 0, nick: v.nick || getNick(address) || null }));
   rows.sort((a, b) => (b.points || 0) - (a.points || 0));
   return rows.slice(0, 10);
 }
 
-function broadcastWeeklyLeaderboard() {
-  broadcastAll('weekly_leaderboard', { weeklyKey, top: getWeeklyTop10() });
+async function broadcastWeeklyLeaderboard() {
+  const top = await getWeeklyTop10();
+  broadcastAll('weekly_leaderboard', { weeklyKey, top });
 }
 
 let roomCounter = 0;
@@ -640,22 +707,38 @@ wss.on('connection', (socket, req) => {
         case 'weekly_points':
           {
             if (!client.address) return;
-            weeklyResetIfNeeded();
             const pts = Number(msg.points || 0);
             if (!Number.isFinite(pts) || pts <= 0) return;
             const a = String(client.address).toLowerCase();
+            await weeklyResetIfNeeded();
+
+            if (redis) {
+              try {
+                const k = weeklyKey;
+                await redis.zIncrBy(redisWeeklyScoresKey(k), pts, a);
+                const nick = getNick(a) || null;
+                if (nick) await redis.hSet(redisWeeklyNicksKey(k), a, String(nick));
+                await broadcastWeeklyLeaderboard();
+                break;
+              } catch (e) {
+                console.warn('[WEEKLY] redis weekly_points failed, falling back to file', String(e?.message || e));
+                redis = null;
+              }
+            }
+
             const prev = weeklyScores.get(a) || { points: 0, nick: getNick(a) || null, updatedAt: Date.now() };
             const next = { points: (prev.points || 0) + pts, nick: getNick(a) || prev.nick || null, updatedAt: Date.now() };
             weeklyScores.set(a, next);
             weeklyPersist();
-            broadcastWeeklyLeaderboard();
+            await broadcastWeeklyLeaderboard();
           }
           break;
 
         case 'get_weekly_leaderboard':
           {
-            weeklyResetIfNeeded();
-            broadcast(socket, 'weekly_leaderboard', { weeklyKey, top: getWeeklyTop10() });
+            await weeklyResetIfNeeded();
+            const top = await getWeeklyTop10();
+            broadcast(socket, 'weekly_leaderboard', { weeklyKey, top });
           }
           break;
 

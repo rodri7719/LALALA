@@ -1388,6 +1388,7 @@ function fxLightning(x,y,h,intense){
   }
 }
 function fxFireExplosion(x,y,big){
+  return;
   const n=big?14:7;
   for(let i=0;i<n;i++){
     const el=document.createElement('div');el.className='fx-fire';
@@ -1403,6 +1404,7 @@ function fxShockwave(x,y){
   el.style.left=x+'px';el.style.top=y+'px';sfxEl.appendChild(el);setTimeout(()=>el.remove(),650);
 }
 function fxColumnLight(col){
+  return;
   const bw=document.getElementById('bwrap').getBoundingClientRect();
   const cv=getComputedStyle(document.documentElement).getPropertyValue('--cell');
   const cellW=parseFloat(cv)||70;const gap=3;const x=bw.left+8+(col*(cellW+gap));
@@ -1440,8 +1442,7 @@ function fxExplosionRays(centerX,centerY,cells){
   });
 }
 function triggerScreenImpact(){
-  const app=document.getElementById('app');app.classList.remove('shake');void app.offsetWidth;app.classList.add('shake');
-  const fl=document.createElement('div');fl.className='fx-flash';document.body.appendChild(fl);setTimeout(()=>fl.remove(),300);
+  return;
 }
 
 // ══ SNOW ══

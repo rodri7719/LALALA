@@ -137,7 +137,10 @@ export function useVS(address) {
         if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
         lobbyPollRef.current = setInterval(() => {
           try {
-            if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'get_lobby_users' }));
+            if (socket.readyState === 1) {
+              socket.send(JSON.stringify({ type: 'get_lobby_users' }));
+              socket.send(JSON.stringify({ type: 'get_weekly_leaderboard' }));
+            }
           } catch (e) {}
         }, 10000);
       };

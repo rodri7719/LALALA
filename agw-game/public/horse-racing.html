@@ -937,7 +937,7 @@ function analyzeHorseSprite(canvas){
 }
 
 // Game state
-let balance=1000, wins=0, losses=0, raceNum=1;
+let balance=1000, wins=0, losses=0, raceNum=0;
 let selId=null, betAmt=50, isRacing=false;
 let lastT=null, raceStartT=null;
 let hState={}, predWinner=null, finOrder=[];
@@ -2502,16 +2502,18 @@ function showResult(won,payout,pts,myP) {
       <div class="pdot" style="background:${h.color};box-shadow:0 0 9px ${h.color}88"></div>
       <div class="pname">${h.name}</div></div>`;
   }).join('');
-  const ptsTxt = (Number(pts||0)>0) ? ` · Points +${Number(pts||0).toLocaleString()}` : '';
+  const ptsVal = Number(pts||0) || 0;
+  const ptsTxt = (ptsVal>0) ? ` · Derby Points +${ptsVal.toLocaleString()}` : '';
+  const dailyNow = Number(dailyPts||0) || 0;
   if(won){
-    document.getElementById('rpay').innerHTML=`+${payout.toLocaleString()} ${coinHTML('coin')}`;
-    document.getElementById('rsub').textContent=`Winner: ${wName} · Bet ${betAmt} · Odds x${HORSES[selId-1].odds} · Payout +${payout}${ptsTxt}`;
+    document.getElementById('rpay').innerHTML=`+${payout.toLocaleString()} ${coinHTML('coin')} <span style="opacity:.7;font-size:.9rem">chips</span>`;
+    document.getElementById('rsub').textContent=`Winner: ${wName} · Bet ${betAmt} · Odds x${HORSES[selId-1].odds} · Chips +${payout}${ptsTxt} · Points Today: ${dailyNow.toLocaleString()}`;
   } else if (payout>0) {
-    document.getElementById('rpay').innerHTML=`+${payout.toLocaleString()} ${coinHTML('coin')}`;
-    document.getElementById('rsub').textContent=`Winner: ${wName} · "${HORSES[selId-1].name}" finished #${myP} · Place payout +${payout}${ptsTxt}`;
+    document.getElementById('rpay').innerHTML=`+${payout.toLocaleString()} ${coinHTML('coin')} <span style="opacity:.7;font-size:.9rem">chips</span>`;
+    document.getElementById('rsub').textContent=`Winner: ${wName} · "${HORSES[selId-1].name}" finished #${myP} · Chips +${payout}${ptsTxt} · Points Today: ${dailyNow.toLocaleString()}`;
   } else {
     document.getElementById('rpay').innerHTML=`-${betAmt.toLocaleString()} ${coinHTML('coin')}`;
-    document.getElementById('rsub').textContent=`Winner: ${wName} · "${HORSES[selId-1].name}" finished #${myP}${ptsTxt}`;
+    document.getElementById('rsub').textContent=`Winner: ${wName} · "${HORSES[selId-1].name}" finished #${myP}${ptsTxt} · Points Today: ${dailyNow.toLocaleString()}`;
   }
   document.getElementById('resBanner').classList.add('on');
 }
@@ -2589,7 +2591,7 @@ function addHistory(won,payout,wid){
   const wMeta=`x${wh.odds} · ${Math.round(wh.wp)}%`;
   const cash=won?`+${payout.toLocaleString()}`:`-${betAmt.toLocaleString()}`;
   const place=won?`WIN`:`#${myP}`;
-  ch.innerHTML=`<span class="hmain">#${raceNum-1} ${wh.short}</span><span class="hmeta">${wMeta} · ${place} · ${cash} ${coinHTML('coin')}</span>`;
+  ch.innerHTML=`<span class="hmain">#${raceNum} ${wh.short}</span><span class="hmeta">${wMeta} · ${place} · ${cash} ${coinHTML('coin')}</span>`;
   c.insertBefore(ch,c.firstChild); histChips.push(ch);
   if(histChips.length>12)histChips.shift().remove();
 }

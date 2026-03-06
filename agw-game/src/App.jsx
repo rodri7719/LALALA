@@ -598,19 +598,37 @@ export default function App() {
       }}
     >
       <div
+        style={{
+          position:"absolute",
+          inset:0,
+          backgroundImage:"url('/epicahorse.png')",
+          backgroundRepeat:"no-repeat",
+          backgroundPosition:"center calc(50% + 4cm)",
+          backgroundSize:"cover",
+          opacity:0.16,
+          filter:"saturate(1.15) contrast(1.05)",
+          mixBlendMode:"screen",
+          pointerEvents:"none",
+        }}
+      />
+      <div
         onClick={(ev) => ev.stopPropagation()}
         style={{
+          position:"relative",
           width:640,
           maxWidth:"100%",
           borderRadius:22,
           padding:"22px 22px",
-          background:"linear-gradient(160deg,rgba(8,16,30,.96),rgba(6,10,18,.96))",
+          background:"linear-gradient(160deg,rgba(8,16,30,.62),rgba(6,10,18,.62))",
           border:`1px solid ${preGame.color1}55`,
           boxShadow:`0 26px 70px rgba(0,0,0,.75),0 0 40px ${preGame.color1}22`,
           color:"#fff",
           fontFamily:"'Baloo 2',cursive",
+          overflow:"hidden",
+          backdropFilter:"blur(6px)",
         }}
       >
+        <div style={{ position:"relative", zIndex:1 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:14 }}>
           <div>
             <div style={{ fontSize:"2.3rem", lineHeight:1 }}>{preGame.emoji}</div>
@@ -695,6 +713,7 @@ export default function App() {
           >
             ENTER 🏁
           </button>
+        </div>
         </div>
       </div>
     </div>
