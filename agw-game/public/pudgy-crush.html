@@ -23,6 +23,15 @@
 body{background:var(--bgdeep);font-family:'Nunito',sans-serif;color:var(--white);
   height:100vh;height:100dvh;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default;}
 
+body.lowq #snowfall{display:none!important;}
+body.lowq #fx-layer{display:none!important;}
+body.lowq #screen-fx{display:none!important;}
+body.lowq #abstract-bg{display:none!important;}
+body.lowq .aurora,body.lowq .aurora2{display:none!important;}
+body.lowq .piece{filter:none!important;box-shadow:none!important;}
+body.lowq .piece.pw-bomb,body.lowq .piece.pw-zap,body.lowq .piece.pw-bliz,body.lowq .piece.pw-mega{box-shadow:none!important;}
+body.lowq header,body.lowq #missions-bar{backdrop-filter:none!important;}
+
 /* BG */
 #bg-layer{position:fixed;inset:0;z-index:0;overflow:hidden;
   background:linear-gradient(170deg,#0f4d34 0%,#081f16 50%,#0a2a1a 100%);}
@@ -738,6 +747,19 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between;
 //  PUDGY CRUSH v5
 // ══════════════════════════
 const COLS=8,ROWS=8;
+
+const IS_MOBILE = (() => {
+  try {
+    const coarse = typeof window.matchMedia==='function' && window.matchMedia('(pointer: coarse)').matches;
+    const touch = (navigator.maxTouchPoints||0) > 0;
+    const small = Math.min(window.innerWidth||9999, window.innerHeight||9999) <= 860;
+    return coarse || touch || small;
+  } catch { return false; }
+})();
+if (IS_MOBILE) {
+  try { document.body.classList.add('lowq'); } catch {}
+}
+
 // Themed pieces for Pudgy universe — ARCTIC ANIMALS
 // PIECES — 6 base types. Level 7+ unlocks type 6 = PUDGY lightning block
 const PIECES_BASE=['🐟','🐧','🟠','🔵','🟢','🦭','🟣'];
@@ -1449,10 +1471,21 @@ function triggerScreenImpact(){
 const snC=document.getElementById('snowfall'),snX=snC.getContext('2d');let flakes=[];
 function initSn(){snC.width=innerWidth;snC.height=innerHeight;flakes=[];
   for(let i=0;i<70;i++)flakes.push({x:Math.random()*snC.width,y:Math.random()*snC.height,r:Math.random()*3+1,s:Math.random()*.7+.2,w:Math.random()*.4-.2,o:Math.random()*.4+.2});}
-function drawSn(){snX.clearRect(0,0,snC.width,snC.height);flakes.forEach(f=>{f.y+=f.s;f.x+=f.w+Math.sin(f.y*.01)*.3;
-  if(f.y>snC.height){f.y=-5;f.x=Math.random()*snC.width;}
-  snX.beginPath();snX.arc(f.x,f.y,f.r,0,Math.PI*2);snX.fillStyle=`rgba(255,255,255,${f.o})`;snX.fill();});
-  requestAnimationFrame(drawSn);}initSn();drawSn();addEventListener('resize',initSn);
+let _snRaf=0,_snLast=0,_snOn=true;
+function drawSn(t){
+  if(!_snOn) return;
+  if(document.body.classList.contains('lowq')){ _snRaf=0; return; }
+  const now = (typeof t==='number') ? t : performance.now();
+  if(IS_MOBILE && (now - _snLast < 33)) { _snRaf=requestAnimationFrame(drawSn); return; }
+  _snLast = now;
+  snX.clearRect(0,0,snC.width,snC.height);
+  flakes.forEach(f=>{f.y+=f.s;f.x+=f.w+Math.sin(f.y*.01)*.3;
+    if(f.y>snC.height){f.y=-5;f.x=Math.random()*snC.width;}
+    snX.beginPath();snX.arc(f.x,f.y,f.r,0,Math.PI*2);snX.fillStyle=`rgba(255,255,255,${f.o})`;snX.fill();
+  });
+  _snRaf=requestAnimationFrame(drawSn);
+}
+initSn();_snRaf=requestAnimationFrame(drawSn);addEventListener('resize',initSn);
 
 // ══ FX PARTICLES ══
 const fxC=document.getElementById('fx-layer'),fxX=fxC.getContext('2d');let fxP=[];
@@ -1462,10 +1495,27 @@ function spFx(x,y,col,n,sp=1){for(let i=0;i<n;i++){const a=Math.random()*Math.PI
 function spConf(x,y,n){const cs=['#ffd166','#ff6b6b','#48cae4','#a8f0c6','#b388ff','#ffaa5c','#fff'];
   for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=Math.random()*8+3;
   fxP.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-4,life:1,dec:.01+Math.random()*.015,sz:Math.random()*5+2,col:cs[Math.floor(Math.random()*cs.length)]});}}
-function drawFx(){fxX.clearRect(0,0,fxC.width,fxC.height);for(let i=fxP.length-1;i>=0;i--){const p=fxP[i];
-  p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=p.dec;if(p.life<=0){fxP.splice(i,1);continue;}
-  fxX.globalAlpha=p.life;fxX.beginPath();fxX.arc(p.x,p.y,p.sz*p.life,0,Math.PI*2);fxX.fillStyle=p.col;fxX.fill();}
-  fxX.globalAlpha=1;requestAnimationFrame(drawFx);}drawFx();
+let _fxRaf=0,_fxOn=true;
+function drawFx(){
+  if(!_fxOn) return;
+  if(document.body.classList.contains('lowq')){ _fxRaf=0; return; }
+  if(fxP.length===0){ _fxRaf=0; return; }
+  fxX.clearRect(0,0,fxC.width,fxC.height);
+  for(let i=fxP.length-1;i>=0;i--){const p=fxP[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=p.dec;if(p.life<=0){fxP.splice(i,1);continue;}
+    fxX.globalAlpha=p.life;fxX.beginPath();fxX.arc(p.x,p.y,p.sz*p.life,0,Math.PI*2);fxX.fillStyle=p.col;fxX.fill();
+  }
+  fxX.globalAlpha=1;_fxRaf=requestAnimationFrame(drawFx);
+}
+function ensureFxLoop(){ if(_fxRaf||!_fxOn) return; if(document.body.classList.contains('lowq')) return; _fxRaf=requestAnimationFrame(drawFx); }
+
+document.addEventListener('visibilitychange',()=>{
+  const hidden = document.hidden;
+  _snOn = !hidden;
+  _fxOn = !hidden;
+  if(hidden){ if(_snRaf) cancelAnimationFrame(_snRaf); _snRaf=0; if(_fxRaf) cancelAnimationFrame(_fxRaf); _fxRaf=0; }
+  else { if(!_snRaf && !document.body.classList.contains('lowq')) _snRaf=requestAnimationFrame(drawSn); ensureFxLoop(); }
+});
 
 // BG floaters + penguin decorations
 (function(){const c=document.getElementById('bg-layer');
