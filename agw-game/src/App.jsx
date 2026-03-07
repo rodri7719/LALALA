@@ -926,7 +926,7 @@ export default function App() {
         win.postMessage({ type: "VS_PAYMENT_UPDATE", p1Paid: vs.matchData.p1Paid, p2Paid: vs.matchData.p2Paid, paid: vs.matchData.paid, paidBy: vs.matchData.paidBy }, "*");
       }
     }
-  }, [vs.vsState, vs.matchData]);
+  }, [vs.vsState, vs.matchData, iframeLoaded, currentGame?.id]);
 
   // If tx succeeded before VS reached 'matched', confirm as soon as roomId exists.
   useEffect(() => {
