@@ -1365,6 +1365,7 @@ let _vsMatch = null; /* { roomId, opponent, seed } */
 let _vsPaid = false;
 let _vsWaitingStart = false;
 let _vsStarted = false;
+let _vsStartTimer = null;
 let _mmElapsed = 0;
 
 function selectMode(mode) {
@@ -1426,6 +1427,7 @@ function startMatchmaking() {
   _vsPaid = false;
   _vsWaitingStart = false;
   _vsStarted = false;
+  if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
   _mmElapsed = 0;
   const t = document.getElementById('mm-timer');
   if (t) t.textContent = '0';
@@ -1444,6 +1446,7 @@ function cancelMatchmaking() {
   _vsPaid = false;
   _vsWaitingStart = false;
   _vsStarted = false;
+  if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
   _mmElapsed = 0;
   window.parent.postMessage({ type: 'VS_CANCEL_FIND', gameId: 'chess' }, '*');
   showScreen('s-vsplayer');
@@ -1881,6 +1884,7 @@ function showChallengeInvite(from, fromNick){
 
 function executePlay(){
   hidePayOverlay();
+  if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
   _vsStarted = true;
   if(_pendingPlay==='new'){
     _pendingPlay=null;
@@ -1949,6 +1953,10 @@ window.addEventListener('message',(e)=>{
     const mm = document.getElementById('s-matchmaking');
     if (mm) mm.style.display = 'none';
     _vsWaitingStart=false;
+    if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
+    if (_vsStarted) {
+      return;
+    }
     // VS_GAME_START is authoritative (server only sends it when both payments are confirmed).
     // Local _vsPaid can be stale due to iframe/message timing, so always start.
     _vsPaid = true;
@@ -1959,6 +1967,7 @@ window.addEventListener('message',(e)=>{
     _vsPaid=false;
     _vsWaitingStart=false;
     _vsStarted=false;
+    if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
 
     if (_mmTimer) { clearInterval(_mmTimer); _mmTimer = null; }
     _mmElapsed = 0;
@@ -2004,7 +2013,12 @@ window.addEventListener('message',(e)=>{
         _vsPaid = true;
         _vsWaitingStart = false;
         setPayStatus('Both paid. Starting…', '#48c47e');
-        setTimeout(() => { try { executePlay(); } catch(e) {} }, 120);
+        if (_vsStartTimer) { clearTimeout(_vsStartTimer); _vsStartTimer = null; }
+        _vsStartTimer = setTimeout(() => {
+          try {
+            if (!_vsStarted) executePlay();
+          } catch(e) {}
+        }, 120);
         return;
       }
     } catch (e) {}

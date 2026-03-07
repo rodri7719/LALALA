@@ -941,22 +941,6 @@ export default function App() {
     }
   }, [vs.vsState, vs.matchData, iframeLoaded, currentGame?.id]);
 
-  useEffect(() => {
-    if (currentGame?.id !== 'chess') return;
-    if (vs?.vsState !== 'playing') return;
-    const win = iframeRef.current?.contentWindow || vsBridgeRef.current?.win;
-    if (!win) return;
-
-    const t = setInterval(() => {
-      try {
-        const w = iframeRef.current?.contentWindow || vsBridgeRef.current?.win;
-        if (w) w.postMessage({ type: 'VS_GAME_START' }, '*');
-      } catch {}
-    }, 800);
-
-    return () => clearInterval(t);
-  }, [currentGame?.id, vs?.vsState]);
-
   // If tx succeeded before VS reached 'matched', confirm as soon as roomId exists.
   useEffect(() => {
     try {
