@@ -1942,11 +1942,10 @@ window.addEventListener('message',(e)=>{
     const mm = document.getElementById('s-matchmaking');
     if (mm) mm.style.display = 'none';
     _vsWaitingStart=false;
-    if(_vsPaid){
-      executePlay();
-    } else {
-      setPayStatus('Waiting for your payment…','#c8f5e0');
-    }
+    // VS_GAME_START is authoritative (server only sends it when both payments are confirmed).
+    // Local _vsPaid can be stale due to iframe/message timing, so always start.
+    _vsPaid = true;
+    executePlay();
   }
   if(e.data?.type==='VS_IDLE'){
     _vsMatch=null;
