@@ -883,7 +883,13 @@ wss.on('connection', (socket, req) => {
                 if (v.reason === 'tx_to_mismatch') {
                   console.log('[PAYMENT] tx_to_mismatch details', { expectedTo: v.expectedTo, actualTo: v.actualTo });
                 }
-                broadcast(socket, 'payment_rejected', { roomId, reason: v.reason });
+                broadcast(
+                  socket,
+                  'payment_rejected',
+                  (v.reason === 'tx_to_mismatch')
+                    ? { roomId, reason: v.reason, expectedTo: v.expectedTo, actualTo: v.actualTo }
+                    : { roomId, reason: v.reason }
+                );
                 return;
               }
             } catch (e) {
