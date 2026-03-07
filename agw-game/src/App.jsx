@@ -743,9 +743,8 @@ export default function App() {
   useEffect(() => {
     const onMsg = (e) => {
       if (e?.source && iframeRef.current?.contentWindow && e.source === iframeRef.current.contentWindow) {
-        if (!vsBridgeRef.current?.win) {
-          vsBridgeRef.current = { ...vsBridgeRef.current, win: e.source };
-        }
+        // Always keep the bridge pointing at the current iframe window.
+        vsBridgeRef.current = { ...vsBridgeRef.current, win: e.source };
       }
 
       if (e.data?.type === "AGW_PLAY") {
@@ -887,6 +886,11 @@ export default function App() {
   }, [sendTransaction, isPending, currentGame, vs, address, addLocalWeeklyPoints]);
 
   useEffect(() => {
+    // Reset bridge target when switching games to avoid sending VS_* messages to a stale iframe window.
+    vsBridgeRef.current = { win: iframeRef.current?.contentWindow || null, gameId: currentGame?.id || null };
+  }, [currentGame?.id]);
+
+  useEffect(() => {
     if (vs?.vsState === 'idle') {
       pendingVsPaymentTxHashRef.current = null;
     }
@@ -899,8 +903,15 @@ export default function App() {
   }, [currentGame?.id]);
 
   useEffect(() => {
-    const win = vsBridgeRef.current?.win;
+    const win = (currentGame?.id === 'chess')
+      ? (iframeRef.current?.contentWindow || vsBridgeRef.current?.win)
+      : (vsBridgeRef.current?.win);
     if (!win) return;
+
+    // Keep bridge ref synced as well.
+    if (vsBridgeRef.current?.win !== win) {
+      vsBridgeRef.current = { ...vsBridgeRef.current, win };
+    }
 
     if (vs.vsState === "finding") {
       win.postMessage({ type: "VS_FINDING" }, "*");
@@ -927,6 +938,22 @@ export default function App() {
       }
     }
   }, [vs.vsState, vs.matchData, iframeLoaded, currentGame?.id]);
+
+  useEffect(() => {
+    if (currentGame?.id !== 'chess') return;
+    if (vs?.vsState !== 'playing') return;
+    const win = iframeRef.current?.contentWindow || vsBridgeRef.current?.win;
+    if (!win) return;
+
+    const t = setInterval(() => {
+      try {
+        const w = iframeRef.current?.contentWindow || vsBridgeRef.current?.win;
+        if (w) w.postMessage({ type: 'VS_GAME_START' }, '*');
+      } catch {}
+    }, 800);
+
+    return () => clearInterval(t);
+  }, [currentGame?.id, vs?.vsState]);
 
   // If tx succeeded before VS reached 'matched', confirm as soon as roomId exists.
   useEffect(() => {
