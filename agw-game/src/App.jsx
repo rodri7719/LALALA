@@ -925,6 +925,7 @@ export default function App() {
     }
 
     if (vs.vsState === "playing") {
+      try { if (currentGame?.id === 'chess') console.log('[APP] post VS_GAME_START'); } catch {}
       win.postMessage({ type: "VS_GAME_START" }, "*");
     }
 
@@ -934,6 +935,7 @@ export default function App() {
 
     if (vs.vsState === "matched" && vs.matchData?.roomId) {
       if (typeof vs.matchData?.p1Paid === "boolean" || typeof vs.matchData?.p2Paid === "boolean") {
+        try { if (currentGame?.id === 'chess') console.log('[APP] post VS_PAYMENT_UPDATE', { p1Paid: vs.matchData.p1Paid, p2Paid: vs.matchData.p2Paid, paidBy: vs.matchData.paidBy }); } catch {}
         win.postMessage({ type: "VS_PAYMENT_UPDATE", p1Paid: vs.matchData.p1Paid, p2Paid: vs.matchData.p2Paid, paid: vs.matchData.paid, paidBy: vs.matchData.paidBy }, "*");
       }
     }

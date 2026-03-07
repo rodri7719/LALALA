@@ -1364,6 +1364,7 @@ let _mmTimer = null, _mmCountdown = 30;
 let _vsMatch = null; /* { roomId, opponent, seed } */
 let _vsPaid = false;
 let _vsWaitingStart = false;
+let _vsStarted = false;
 let _mmElapsed = 0;
 
 function selectMode(mode) {
@@ -1424,6 +1425,7 @@ function startMatchmaking() {
   _vsMatch = null;
   _vsPaid = false;
   _vsWaitingStart = false;
+  _vsStarted = false;
   _mmElapsed = 0;
   const t = document.getElementById('mm-timer');
   if (t) t.textContent = '0';
@@ -1441,6 +1443,7 @@ function cancelMatchmaking() {
   _vsMatch = null;
   _vsPaid = false;
   _vsWaitingStart = false;
+  _vsStarted = false;
   _mmElapsed = 0;
   window.parent.postMessage({ type: 'VS_CANCEL_FIND', gameId: 'chess' }, '*');
   showScreen('s-vsplayer');
@@ -1878,16 +1881,20 @@ function showChallengeInvite(from, fromNick){
 
 function executePlay(){
   hidePayOverlay();
+  _vsStarted = true;
   if(_pendingPlay==='new'){
     _pendingPlay=null;
-    doNewGameCore();
-    return;
   }
-  _pendingPlay=null;
   startGameCore();
 }
 
 window.addEventListener('message',(e)=>{
+  try {
+    const t = String(e.data?.type || '');
+    if (t && (t.startsWith('VS_') || t.startsWith('AGW_'))) {
+      console.log('[AJEDREZ] recv', t, e.data);
+    }
+  } catch (err) {}
   if (e.data?.type === 'LOBBY_USERS') {
     window._lastLobbyUsers = Array.isArray(e.data?.users) ? e.data.users : [];
     renderLobbyUsers(window._lastLobbyUsers);
@@ -1951,6 +1958,7 @@ window.addEventListener('message',(e)=>{
     _vsMatch=null;
     _vsPaid=false;
     _vsWaitingStart=false;
+    _vsStarted=false;
 
     if (_mmTimer) { clearInterval(_mmTimer); _mmTimer = null; }
     _mmElapsed = 0;
@@ -1982,8 +1990,25 @@ window.addEventListener('message',(e)=>{
   if (e.data?.type === 'VS_PAYMENT_UPDATE') {
     const paidBy = String(e.data?.paidBy || '').toLowerCase();
     const paidMap = e.data?.paid || null;
+    const p1Paid = (typeof e.data?.p1Paid === 'boolean') ? e.data.p1Paid : null;
+    const p2Paid = (typeof e.data?.p2Paid === 'boolean') ? e.data.p2Paid : null;
     const me = String(window._playerAddress || '').toLowerCase();
     if (!_vsMatch) return;
+
+    // If parent/server indicates both players paid, start immediately.
+    // This removes reliance on VS_GAME_START delivery timing.
+    try {
+      const bothPaidByMap = !!(paidMap && paidMap[String(me)] && Object.values(paidMap).some(v => v === true) && Object.keys(paidMap).length >= 2 && Object.values(paidMap).every(v => v === true));
+      const bothPaidByFlags = (p1Paid === true && p2Paid === true);
+      if (!_vsStarted && (bothPaidByFlags || bothPaidByMap)) {
+        _vsPaid = true;
+        _vsWaitingStart = false;
+        setPayStatus('Both paid. Starting…', '#48c47e');
+        setTimeout(() => { try { executePlay(); } catch(e) {} }, 120);
+        return;
+      }
+    } catch (e) {}
+
     if (paidMap && me && paidMap[me]) {
       _vsPaid = true;
       _vsWaitingStart = true;
