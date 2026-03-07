@@ -146,7 +146,15 @@ export function useVS(address) {
       };
       socket.onmessage = (event) => {
         try {
+          try {
+            const raw = typeof event?.data === 'string' ? event.data : (event?.data ? String(event.data) : '');
+            if (raw) console.log('[useVS] WS recv raw:', raw.slice(0, 300));
+          } catch (e) {}
           const msg = JSON.parse(event.data);
+
+          try {
+            if (msg?.type) console.log('[useVS] WS recv type:', msg.type);
+          } catch (e) {}
 
           switch (msg.type) {
             case 'stats':
@@ -223,7 +231,12 @@ export function useVS(address) {
               break;
           }
         } catch (err) {
-          console.warn('[useVS] Invalid WS message', err);
+          try {
+            const raw = typeof event?.data === 'string' ? event.data : (event?.data ? String(event.data) : '');
+            console.warn('[useVS] Invalid WS message', err, 'raw:', raw.slice(0, 300));
+          } catch (e) {
+            console.warn('[useVS] Invalid WS message', err);
+          }
         }
       };
 
