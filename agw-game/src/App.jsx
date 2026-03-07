@@ -13,8 +13,16 @@ import { useAccount, useDisconnect, useSendTransaction } from "wagmi";
 import { parseEther, encodeFunctionData } from "viem";
 import { useVS } from "./useVS.js";
 
-const ARCADE_CONTRACT = "0x024d05570022e4b82B8Efe49c3fEF935F94b7d38";
-const FEE_PER_GAME = parseEther("0.00001");
+const ARCADE_CONTRACT = (
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ARCADE_CONTRACT)
+    ? String(import.meta.env.VITE_ARCADE_CONTRACT)
+    : "0x0e589112580A1e61E210D3409ec854fA53e9960d"
+);
+const FEE_PER_GAME = parseEther(
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FEE_PER_GAME)
+    ? String(import.meta.env.VITE_FEE_PER_GAME)
+    : "0.000006"
+);
 
 const ARCADE_ABI = [
   {
@@ -242,7 +250,7 @@ function GameCard({ game, onEnter, disabled }) {
         fontFamily:"'Baloo 2',cursive", fontSize:".62rem",
         color:"rgba(255,255,255,.22)", textAlign:"center", marginTop:8,
       }}>
-        0.00001 ETH · Abstract Chain
+        0.000006 ETH · Abstract Chain
       </div>
     </div>
   );
@@ -637,7 +645,7 @@ export default function App() {
           </div>
           <div style={{ textAlign:"right", fontSize:".72rem", color:"rgba(255,255,255,.45)" }}>
             Entry per race
-            <div style={{ fontWeight:900, color:"rgba(255,255,255,.8)" }}>0.00001 ETH + fee</div>
+            <div style={{ fontWeight:900, color:"rgba(255,255,255,.8)" }}>0.000006 ETH + fee</div>
             <div style={{ marginTop:6, color:"rgba(255,255,255,.35)" }}>Weekly resets Fri 00:00 UTC</div>
             <div style={{ marginTop:10, fontSize:".74rem", color:"rgba(255,255,255,.62)" }}>
               Lifetime Points
