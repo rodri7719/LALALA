@@ -313,14 +313,14 @@ export function useVS(address) {
     }
   };
 
-  const confirmPayment = (txHash) => {
+  const confirmPayment = (txHash, roomIdOverride = null) => {
     const h = (typeof txHash === 'string' ? txHash : (txHash?.hash || ''));
     if (h && lastPaymentTxSentRef.current === h) return;
     if (wsRef.current && wsRef.current.readyState === 1) {
       if (h) lastPaymentTxSentRef.current = h;
       wsRef.current.send(JSON.stringify({
         type: 'payment_confirmed',
-        roomId: matchData?.roomId || null,
+        roomId: roomIdOverride || matchData?.roomId || null,
         txHash: txHash || null,
       }));
     }

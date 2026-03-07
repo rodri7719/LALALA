@@ -820,9 +820,11 @@ export default function App() {
       }
 
       if (e.data?.type === "VS_CONFIRM_PAYMENT") {
-        const txHash = lastPaymentTxHashRef.current;
-        vs.confirmPayment(txHash);
+        const roomId = String(e.data?.roomId || '') || null;
+        const txHash = lastPaymentTxHashRef.current || pendingVsPaymentTxHashRef.current;
+        vs.confirmPayment(txHash, roomId);
         lastPaymentTxHashRef.current = null;
+        pendingVsPaymentTxHashRef.current = null;
       }
 
       if (e.data?.type === "VS_CHESS_MOVE") {
