@@ -2553,12 +2553,12 @@ function updateStats(){
   try{ localStorage.setItem('DERBY_CHIPS_BAL',String(balance)); }catch(e){}
 }
 
-function betFactor(amt){
-  const a=Number(amt||0);
-  if(a>=500) return 1.50;
-  if(a>=250) return 1.32;
-  if(a>=100) return 1.18;
-  if(a>=50) return 1.10;
+function betFactor(b){
+  if(b<=10) return 1.55;
+  if(b<=25) return 1.40;
+  if(b<=50) return 1.25;
+  if(b<=100) return 1.15;
+  if(b<=250) return 1.05;
   return 1.00;
 }
 
@@ -2567,8 +2567,8 @@ function awardDerbyPoints(place){
   if(place>3) return 0;
   const h=HORSES[selId-1];
   const odds=Number(h?.odds||1);
-  const base = place===1 ? 100 : (place===2 ? 35 : 20);
-  const pts = Math.max(0, Math.round(base * odds * betFactor(betAmt)));
+
+  const pts = Math.max(0, Math.round(betAmt * odds));
   if(pts<=0) return 0;
   resetDailyIfNeeded();
   dailyPts += pts;
