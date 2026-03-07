@@ -49,8 +49,20 @@ const WS_RATE_WINDOW_MS = Number(process.env.WS_RATE_WINDOW_MS || 10_000);
 const WS_RATE_MAX_MSGS = Number(process.env.WS_RATE_MAX_MSGS || 120);
 
 const RPC_URL = String(process.env.RPC_URL || '').trim();
-const ARCADE_CONTRACT = String(process.env.ARCADE_CONTRACT || '0x024d05570022e4b82B8Efe49c3fEF935F94b7d38').toLowerCase();
-const FEE_WEI_MIN = BigInt(process.env.FEE_WEI_MIN || '10000000000000'); // 0.00001 ETH
+const ARCADE_CONTRACT = String(process.env.ARCADE_CONTRACT || '0x0e589112580A1e61E210D3409ec854fA53e9960d').toLowerCase();
+const ARCADE_CONTRACTS = String(process.env.ARCADE_CONTRACTS || '').trim();
+const VALID_ARCADE_CONTRACTS = new Set(
+  (ARCADE_CONTRACTS
+    ? ARCADE_CONTRACTS.split(',')
+    : [
+        ARCADE_CONTRACT,
+        '0x024d05570022e4b82B8Efe49c3fEF935F94b7d38',
+        '0xcbee73cdfc0c109ef4bb955fdd49907b8b812e7c',
+      ])
+    .map(s => String(s || '').trim().toLowerCase())
+    .filter(Boolean)
+);
+const FEE_WEI_MIN = BigInt(process.env.FEE_WEI_MIN || '6000000000000'); // 0.000006 ETH
 const usedTx = new Map(); // txHash -> { address, usedAt }
 
 async function rpc(method, params) {
@@ -86,7 +98,9 @@ async function verifyPaymentTx({ txHash, expectedFrom }) {
   const to = String(tx.to || '').toLowerCase();
   if (!from || !to) return { ok: false, reason: 'tx_missing_fields' };
   if (String(expectedFrom || '').toLowerCase() !== from) return { ok: false, reason: 'tx_from_mismatch' };
-  if (to !== ARCADE_CONTRACT) return { ok: false, reason: 'tx_to_mismatch' };
+  if (!VALID_ARCADE_CONTRACTS.has(to)) {
+    return { ok: false, reason: 'tx_to_mismatch', expectedTo: Array.from(VALID_ARCADE_CONTRACTS), actualTo: to };
+  }
 
   const value = hexToBigInt(tx.value);
   if (value < FEE_WEI_MIN) return { ok: false, reason: 'tx_value_too_low' };
@@ -866,6 +880,9 @@ wss.on('connection', (socket, req) => {
               const v = await verifyPaymentTx({ txHash, expectedFrom: client.address });
               if (!v.ok) {
                 console.log('[PAYMENT] rejected (verify failed)', { roomId, from: client.address, id: client.id, reason: v.reason, txHash });
+                if (v.reason === 'tx_to_mismatch') {
+                  console.log('[PAYMENT] tx_to_mismatch details', { expectedTo: v.expectedTo, actualTo: v.actualTo });
+                }
                 broadcast(socket, 'payment_rejected', { roomId, reason: v.reason });
                 return;
               }
