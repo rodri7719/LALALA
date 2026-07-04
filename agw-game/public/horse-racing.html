@@ -61,8 +61,13 @@ body{background:var(--dark);font-family:'Barlow Condensed',sans-serif;overflow:h
 .logo{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:4px;color:var(--gold);text-shadow:0 0 25px rgba(255,215,0,0.35);display:flex;align-items:center;gap:10px;}
 .logo .lico{font-size:28px;filter:drop-shadow(0 0 12px rgba(255,215,0,0.35));}
 .alogo{width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 0 14px rgba(255,215,0,0.25));}
-.mBtn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.86);font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;padding:7px 10px;border-radius:12px;cursor:pointer;white-space:nowrap;}
-.mBtn:hover{border-color:rgba(255,215,0,0.55);color:var(--gold);}
+.mBtn{background:linear-gradient(160deg,rgba(0,232,122,0.14),rgba(0,120,70,0.10));border:1.5px solid rgba(0,232,122,0.65);color:#eafff2;font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;letter-spacing:2.2px;padding:11px 18px;border-radius:14px;cursor:pointer;white-space:nowrap;box-shadow:0 0 10px rgba(0,232,122,0.35),0 0 22px rgba(0,232,122,0.18),inset 0 0 10px rgba(0,232,122,0.08);animation:mBtnGlow 2.2s ease-in-out infinite;transition:transform .15s ease;}
+.mBtn:hover{border-color:#00e87a;color:#ffffff;transform:translateY(-1px) scale(1.03);box-shadow:0 0 14px rgba(0,232,122,0.55),0 0 30px rgba(0,232,122,0.3),inset 0 0 12px rgba(0,232,122,0.14);}
+.mBtn:active{transform:translateY(0) scale(0.98);}
+@keyframes mBtnGlow{
+  0%,100%{box-shadow:0 0 10px rgba(0,232,122,0.35),0 0 22px rgba(0,232,122,0.18),inset 0 0 10px rgba(0,232,122,0.08);border-color:rgba(0,232,122,0.65);}
+  50%{box-shadow:0 0 16px rgba(0,232,122,0.6),0 0 34px rgba(0,232,122,0.32),inset 0 0 14px rgba(0,232,122,0.16);border-color:rgba(0,232,122,0.95);}
+}
 .mOv{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.82);backdrop-filter:blur(10px);padding:16px;}
 .mOv.on{display:flex;}
 .mBox{width:min(520px,100%);background:linear-gradient(160deg,#0b1224,#060812);border:1px solid rgba(255,215,0,0.18);border-radius:18px;box-shadow:0 26px 70px rgba(0,0,0,0.75);padding:16px 16px;}
@@ -782,6 +787,7 @@ const HORSES = [
 const N = HORSES.length;
 
 let _prevMaxOdds = 6.2;
+let _topOddsHorseId = null;
 
 // Per-horse image cache
 const HORSE_IMAGES = {};
@@ -1637,6 +1643,15 @@ function randomizeOddsAndWinPct() {
     }
   }catch(e){}
 
+  // Lock in exactly which horse counts as "the underdog" for this race,
+  // so the mission check later doesn't depend on recomputing Math.max
+  // (avoids edge cases with tied odds or timing).
+  try{
+    let topId=null, topOdds=-1;
+    for (const h of HORSES){ if (Number(h.odds)>topOdds){ topOdds=Number(h.odds); topId=h.id; } }
+    _topOddsHorseId = topId;
+  }catch(e){ _topOddsHorseId = null; }
+
   // Recompute implied win% from odds
   const w = HORSES.map(h=>1/Math.max(1.01,h.odds));
   const t = w.reduce((a,b)=>a+b,0) || 1;
@@ -2047,9 +2062,7 @@ function handleStart() {
   _pendingRacePayment = true;
 
   try{
-    const maxOdds = Math.max(...HORSES.map(h=>Number(h.odds||0)));
-    const myOdds = Number(HORSES[selId-1]?.odds || 0);
-    _selectedWasUnderdog = (myOdds>0 && maxOdds>0 && myOdds===maxOdds);
+    _selectedWasUnderdog = (_topOddsHorseId!=null && selId===_topOddsHorseId);
   }catch(e){ _selectedWasUnderdog = false; }
 
   // Prime/unlock race music on a user gesture (wallet + countdown breaks autoplay)
