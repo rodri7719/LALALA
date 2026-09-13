@@ -1,0 +1,61 @@
+{
+  "results": [
+    {
+      "left": 502.5,
+      "right": 1151.5,
+      "top": 249.234375,
+      "bottom": 898.234375,
+      "width": 1440,
+      "height": 1000,
+      "lightEffects": false
+    },
+    {
+      "left": 10.5,
+      "right": 349.5,
+      "top": 313,
+      "bottom": 652,
+      "width": 360,
+      "height": 740,
+      "lightEffects": true
+    },
+    {
+      "left": 9.5,
+      "right": 380.5,
+      "top": 330.5,
+      "bottom": 701.5,
+      "width": 390,
+      "height": 844,
+      "lightEffects": true
+    },
+    {
+      "left": 9.5,
+      "right": 420.5,
+      "top": 354.5,
+      "bottom": 765.5,
+      "width": 430,
+      "height": 932,
+      "lightEffects": true
+    },
+    {
+      "left": 288.5,
+      "right": 555.5,
+      "top": 98.5,
+      "bottom": 365.5,
+      "width": 844,
+      "height": 390,
+      "lightEffects": true
+    }
+  ],
+  "timer": {
+    "first": 100,
+    "afterDuplicate": 100,
+    "gameActive": false
+  },
+  "cancellation": {
+    "sameBoard": true,
+    "score": 0,
+    "movesLeft": 30,
+    "anim": false
+  },
+  "errors": []
+}

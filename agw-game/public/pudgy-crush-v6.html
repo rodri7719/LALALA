@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <link rel="icon" type="image/png" href="abstract_logo.png" />
+  <link rel="apple-touch-icon" href="abstract_logo.png" />
+  <title>Pudgy Crush v6 (Mobile Low)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#050a12;
+      --panel:rgba(6,14,28,.72);
+      --border:rgba(168,240,198,.22);
+      --gold:#ffd166;
+      --mint:#a8f0c6;
+      --red:#ff6b6b;
+      --safeTop: env(safe-area-inset-top, 0px);
+      --uiTopPad: 10px;
+      --hudH: 52px;
+      --missionH: 28px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;}
+    body{
+      background:linear-gradient(180deg,#0f4d34 0%,#081f16 55%,#050a12 100%);
+      color:#fff;
+      font-family:'Baloo 2',system-ui,sans-serif;
+      overflow:hidden;
+      overscroll-behavior:none;
+      touch-action:manipulation;
+      -webkit-user-select:none;
+      user-select:none;
+    }
+
+    /* Fit-to-screen root (design space) */
+    #fitRoot{position:fixed;left:0;top:0;transform-origin:top left;touch-action:none;}
+
+    #hud{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;
+      background:rgba(6,14,28,.85);
+      border:1px solid rgba(168,240,198,.16);
+      border-radius:12px;
+    }
+    #title{font-weight:900;letter-spacing:.04em;color:var(--gold);font-size:18px;}
+    #meta{display:flex;gap:10px;align-items:center;font-size:13px;color:rgba(255,255,255,.75);}
+    .chip{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);}
+    .chip b{color:#fff;}
+    #hpChip{display:none;}
+
+    #hpBarWrap{display:none;margin-top:8px;}
+    #hpBarBg{height:10px;border-radius:999px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);overflow:hidden;}
+    #hpBarFill{height:100%;width:100%;background:linear-gradient(90deg,#ff6b6b,#ffd166,#00ff9f);border-radius:999px;}
+
+    #missionLine{
+      margin-top:10px;
+      padding:8px 10px;
+      font-size:12px;
+      color:rgba(255,255,255,.72);
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    #stage{
+      position:absolute;left:0;right:0;
+      top:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      padding:calc(var(--safeTop) + var(--uiTopPad)) 10px 10px;
+    }
+
+    #boardWrap{
+      width:100%;
+      max-width:520px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(168,240,198,.14);
+      border-radius:18px;
+      padding:10px;
+    }
+
+    canvas{display:block;width:100%;height:auto;border-radius:12px;background:rgba(0,0,0,.25);touch-action:none;}
+
+    #footer{
+      margin-top:10px;
+      display:flex;gap:10px;justify-content:space-between;align-items:center;
+      color:rgba(255,255,255,.65);
+      font-size:12px;
+    }
+
+    #btnStart{
+      background:linear-gradient(135deg,#00ff9f,#00b4d8);
+      border:none;
+      color:#000;
+      border-radius:12px;
+      padding:10px 14px;
+      font-weight:900;
+      letter-spacing:.06em;
+    }
+
+    #btnReset{
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.18);
+      color:#fff;
+      border-radius:12px;
+      padding:10px 14px;
+      font-weight:900;
+      letter-spacing:.06em;
+    }
+
+    #hint{
+      color:rgba(168,240,198,.75);
+      font-size:12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="fitRoot">
+    <div id="stage">
+      <div id="boardWrap">
+        <div id="hud">
+          <div id="title">Pudgy Crush v6</div>
+          <div id="meta">
+            <div class="chip">Lvl: <b id="lvl">1</b></div>
+            <div class="chip">Moves: <b id="moves">0</b></div>
+            <div class="chip">Time: <b id="time">0</b></div>
+            <div class="chip" id="hpChip">HP: <b id="hp">100</b></div>
+            <div class="chip">Score: <b id="score">0</b></div>
+          </div>
+        </div>
+        <canvas id="cv" width="512" height="512"></canvas>
+        <div id="missionLine">Loading…</div>
+        <div id="footer">
+          <button id="btnStart" type="button">START</button>
+          <button id="btnReset" type="button">RESET</button>
+          <div id="hint">Tap 2 adjacent tiles to swap</div>
+        </div>
+        <div id="hpBarWrap">
+          <div id="hpBarBg"><div id="hpBarFill"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // v6 goals (phase 0): mobile-first, ultra-low CPU, canvas board, no music.
+    // Gameplay parity will be added incrementally.
+
+    const DESIGN_W = 430;
+    const DESIGN_H = 760;
+
+    function fitToScreen(){
+      const root = document.getElementById('fitRoot');
+      const vw = window.innerWidth || DESIGN_W;
+      const vh = window.innerHeight || DESIGN_H;
+      const s = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+      root.style.width = DESIGN_W + 'px';
+      root.style.height = DESIGN_H + 'px';
+      root.style.transform = `scale(${s})`;
+      // after layout changes, make canvas sharp
+      requestAnimationFrame(() => {
+        resizeCanvasForDpr();
+        draw();
+      });
+    }
+    window.addEventListener('resize', fitToScreen);
+    fitToScreen();
+
+    // Board core
+    const ROWS = 8, COLS = 8;
+
+    // Types 0..5 exist in v5 with embedded background-image sprites.
+    // (We purposely skip type 6 because it references wildcar7.png and user requested v6 without it for now.)
+    const TYPES = 6;
+
+    const cv = document.getElementById('cv');
+    const ctx = cv.getContext('2d', { alpha: true, desynchronized: true });
+
+    function resizeCanvasForDpr(){
+      const rect = cv.getBoundingClientRect();
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      const w = Math.max(1, Math.floor(rect.width * dpr));
+      const h = Math.max(1, Math.floor(rect.height * dpr));
+      if(cv.width !== w || cv.height !== h){
+        cv.width = w;
+        cv.height = h;
+      }
+    }
+
+    let board = [];
+    let iceHp = [];
+    let pwGrid = [];
+    let blocked = [];
+    let fallDy = [];
+    let popScale = [];
+    let sparks = [];
+    let score = 0;
+    let movesLeft = 0;
+    let timeLeft = 0;
+
+    let level = 1;
+    let levelConfig = null;
+    let missionProgress = [];
+
+    // Survival
+    let survivalMode = false;
+    let survivalHP = 100;
+    let survivalMaxHP = 100;
+    let survivalTimeLeft = 0;
+    let survivalDrainRate = 2.0;
+    let survivalHealPerBlock = 3.0;
+
+    let gameActive = false;
+    let timerId = null;
+
+    // Selection
+    let sel = null;
+    let animating = false;
+
+    // Timing: cap 30fps always (mobile-first)
+    const FRAME_MS = 33; // ~30fps cap
+    let lastT = 0;
+
+    // ── Sound (simple) ──
+    let _ac = null;
+    function getAudioCtx(){
+      if(_ac) return _ac;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return null;
+      _ac = new Ctx();
+      return _ac;
+    }
+    function playSwapSound(){
+      const ac = getAudioCtx();
+      if(!ac) return;
+      if(ac.state === 'suspended') ac.resume().catch(()=>{});
+
+      const t0 = ac.currentTime;
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(520, t0);
+      o.frequency.exponentialRampToValueAtTime(720, t0 + 0.055);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.04, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.07);
+      o.connect(g);
+      g.connect(ac.destination);
+      o.start(t0);
+      o.stop(t0 + 0.075);
+    }
+
+    // ── Sprites (identical to v5) ──
+    const sprite = {
+      imgs: new Map(),
+      meta: new Map(),
+      ready: false,
+    };
+
+    function parseCssNum(v, fallback){
+      const n = Number(String(v||'').replace(/[^0-9.\-]/g,''));
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    async function loadSpritesFromV5(){
+      // Fetch v5 HTML, parse piece styles to reuse exact images
+      const res = await fetch('/pudgy-crush.html', { cache: 'no-store' });
+      const txt = await res.text();
+      const styles = txt;
+
+      for(let t=0;t<6;t++){
+        const re = new RegExp(`\\.piece-${t}\\{([\\s\\S]*?)\\}`, 'm');
+        const m = styles.match(re);
+        if(!m) continue;
+        const body = m[1] || '';
+
+        const urlM = body.match(/background-image\s*:\s*url\(("|')?([^"')]+)("|')?\)\s*;/i);
+        if(!urlM) continue;
+        const url = urlM[2];
+
+        const sizeM = body.match(/background-size\s*:\s*([^;]+);/i);
+        const posM  = body.match(/background-position\s*:\s*([^;]+);/i);
+
+        const bgSizeRaw = sizeM ? String(sizeM[1]).trim() : 'cover';
+        const bgPosRaw  = posM ? String(posM[1]).trim() : 'center';
+
+        // only handle % positions (v5 uses 'center 20%' for piece-1)
+        let posX = 0.5, posY = 0.5;
+        if(/%/.test(bgPosRaw)){
+          const parts = bgPosRaw.split(/\s+/).filter(Boolean);
+          if(parts[0] && parts[0].includes('%')) posX = parseCssNum(parts[0], 50)/100;
+          if(parts[1] && parts[1].includes('%')) posY = parseCssNum(parts[1], 50)/100;
+          if(parts[0]==='center') posX = 0.5;
+          if(parts[1]==='center') posY = 0.5;
+        } else {
+          if(bgPosRaw.includes('center')){ posX = 0.5; posY = 0.5; }
+        }
+
+        // Only special-case percent scaling like 130%
+        let scale = 1;
+        if(/%/.test(bgSizeRaw)){
+          const s = parseCssNum(bgSizeRaw, 100);
+          scale = Math.max(0.3, s/100);
+        }
+
+        const img = new Image();
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.src = url;
+        await img.decode().catch(()=>{});
+        sprite.imgs.set(t, img);
+        sprite.meta.set(t, { posX, posY, scale, bgSizeRaw, bgPosRaw });
+      }
+      sprite.ready = sprite.imgs.size >= 4; // tolerate missing but should have most
+    }
+
+    function randType(){
+      return Math.floor(Math.random()*TYPES);
+    }
+
+    const ENABLE_SURVIVAL = false;
+
+    function isSurvivalLevelCheck(lv){
+      if(!ENABLE_SURVIVAL) return false;
+      return lv===3||lv===6||lv===9||lv===12||(lv>12&&(lv-3)%3===0);
+    }
+
+    function getSurvivalTier(lv){
+      if(lv<=3) return 1;
+      if(lv<=6) return 2;
+      if(lv<=9) return 3;
+      if(lv<=12) return 4;
+      return Math.min(10, Math.floor((lv-3)/3)+1);
+    }
+
+    function calcSurvivalParams(lv){
+      const tier = getSurvivalTier(lv);
+      const duration = Math.max(15, 35 - (tier-1)*4);
+      const drain = 2.0 + (tier-1)*0.7;
+      const heal = Math.max(1.5, 4.5 - (tier-1)*0.6);
+      return { duration, drain, heal };
+    }
+
+    // ── Shapes (ported from v5) ──
+    // shape 0=full, 1=diamond, 2=cross, 3=circle-frame, 4=penguin-feet, 5=X-shape, 6=hourglass
+    // 7=T-shape, 8=Crown, 9=Lightning, 10=Spiral
+    function getShapeBlockedCells(shape){
+      const b=[];
+      if(shape===0) return b;
+      if(shape===1){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){const dr=Math.abs(r-3.5),dc=Math.abs(c-3.5);if(dr+dc>4.5)b.push([r,c]);}
+      } else if(shape===2){
+        const cuts=[[0,0],[0,1],[1,0],[0,6],[0,7],[1,7],[6,0],[7,0],[7,1],[6,7],[7,6],[7,7]];
+        cuts.forEach(x=>b.push(x));
+      } else if(shape===3){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){const dr=r-3.5,dc=c-3.5;if(dr*dr+dc*dc>16)b.push([r,c]);}
+      } else if(shape===4){
+        [[0,0],[0,1],[0,2],[0,5],[0,6],[0,7],[7,0],[7,1],[7,2],[7,5],[7,6],[7,7],[1,0],[1,7],[6,0],[6,7]].forEach(x=>b.push(x));
+      } else if(shape===5){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){if(c>1&&c<6&&r>1&&r<6&&Math.abs(r-c)>1&&Math.abs(r-(7-c))>1)b.push([r,c]);}
+      } else if(shape===6){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+          const dist=Math.min(c,7-c);
+          const need=r<4?r:7-r;
+          if(dist<Math.max(0, need-1)) b.push([r,c]);
+        }
+      } else if(shape===7){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+          if(r===0) continue;
+          if(c>=2&&c<=5) continue;
+          if(r>=1&&r<=2&&(c===1||c===6)) continue;
+          b.push([r,c]);
+        }
+      } else if(shape===8){
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+          if(r>=4) continue;
+          if(r<=1&&(c===1||c===3||c===4||c===6)) continue;
+          if(r===2&&c>=1&&c<=6) continue;
+          if(r===3) continue;
+          b.push([r,c]);
+        }
+      } else if(shape===9){
+        const keep=[[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[2,5],[3,3],[3,4],[3,5],
+                    [4,2],[4,3],[4,4],[5,2],[5,3],[5,4],[6,1],[6,2],[6,3],[7,1],[7,2],[7,3]];
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+          if(!keep.some(([kr,kc])=>kr===r&&kc===c)) b.push([r,c]);
+        }
+      } else if(shape===10){
+        const keep=[[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],
+                    [1,0],[1,7],[2,0],[2,7],[3,0],[3,7],[4,0],[4,7],
+                    [5,0],[5,1],[5,2],[5,3],[5,4],[5,5],[5,6],[5,7],
+                    [6,2],[6,3],[6,4],[6,5],[7,3],[7,4]];
+        for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+          if(!keep.some(([kr,kc])=>kr===r&&kc===c)) b.push([r,c]);
+        }
+      }
+      return b;
+    }
+
+    function isBlocked(r,c){
+      return !!(blocked[r] && blocked[r][c]);
+    }
+
+    function getCellType(r,c){
+      if(isBlocked(r,c)) return null;
+      return board[r]?.[c] ?? null;
+    }
+
+    // ── Levels / missions (ported from v5 + infinite gen) ──
+    function clampPieceType(pt){
+      // v6 currently supports sprites 0..5 only
+      const n = Number(pt);
+      if(Number.isFinite(n) && n>=0 && n<TYPES) return n;
+      // map any unknown piece types back into supported range
+      return Math.abs(n||0) % TYPES;
+    }
+
+    function normalizeConfig(cfg){
+      const safe = { ...cfg };
+      safe.missions = (safe.missions || []).map(m => {
+        if(m.type==='piece') return { ...m, pt: clampPieceType(m.pt) };
+        if(m.type==='ice') return { ...m };
+        // ignore unsupported mission types in v6 for now
+        return null;
+      }).filter(Boolean);
+      safe.ice = (safe.ice || []).map(([r,c,hp]) => [r,c,hp]);
+      safe.shape = Number(safe.shape || 0);
+      safe.targetScore = Number(safe.targetScore || 0);
+      safe.moves = Number(safe.moves || 30);
+      safe.time = Number(safe.time || 90);
+      return safe;
+    }
+
+    function getLevelConfig(lv){
+      const base=[
+        {moves:30,time:100,targetScore:300,shape:0,
+         missions:[{type:'piece',pt:0,emoji:'🐟',label:'Sauciii Penguin',count:6},{type:'piece',pt:2,emoji:'🟠',label:'Luca Netz Pudgy',count:4}],
+         ice:[],crates:[]},
+        {moves:30,time:95,targetScore:500,shape:0,
+         missions:[{type:'piece',pt:1,emoji:'🐧',label:'Cygaar Pengu',count:6},{type:'ice',emoji:'🧊',label:'Ice',count:2}],
+         ice:[[3,3,1],[4,4,1]],crates:[]},
+        {moves:30,time:90,targetScore:600,shape:6,
+         missions:[{type:'piece',pt:2,emoji:'🟠',label:'Luca Netz Pudgy',count:8}],ice:[],crates:[]},
+        {moves:30,time:95,targetScore:700,shape:1,
+         missions:[{type:'piece',pt:3,emoji:'🔵',label:'Classic Pudgy',count:8},{type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy',count:6}],
+         ice:[],crates:[]},
+        {moves:30,time:95,targetScore:900,shape:0,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:4},{type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy',count:8}],
+         ice:[[3,3,1],[3,4,1],[4,3,1],[4,4,1]],crates:[]},
+        {moves:30,time:90,targetScore:1200,shape:5,
+         missions:[{type:'piece',pt:5,emoji:'🟣',label:'Moody Madness',count:8}],ice:[],crates:[]},
+        {moves:30,time:90,targetScore:1400,shape:0,
+         missions:[{type:'piece',pt:5,emoji:'🟣',label:'Moody Madness',count:9}],
+         ice:[[1,3,1],[1,4,1]],crates:[]},
+        {moves:30,time:92,targetScore:1600,shape:2,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:4},{type:'piece',pt:2,emoji:'🟠',label:'Luca Netz Pudgy',count:12},{type:'piece',pt:1,emoji:'🐧',label:'Cygaar Pengu',count:10}],
+         ice:[[2,3,2],[2,4,2],[5,3,2],[5,4,2]],crates:[]},
+        {moves:30,time:92,targetScore:1900,shape:4,
+         missions:[{type:'piece',pt:3,emoji:'🔵',label:'Classic Pudgy',count:11},{type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy',count:9},{type:'piece',pt:5,emoji:'🟣',label:'Moody Madness',count:7}],
+         ice:[],crates:[]},
+        {moves:30,time:90,targetScore:2400,shape:5,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:4},{type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy',count:16},{type:'piece',pt:3,emoji:'🔵',label:'Classic Pudgy',count:14}],
+         ice:[[2,3,2],[2,4,2],[3,3,1],[4,4,1],[5,3,2],[5,4,2]],crates:[]},
+        {moves:28,time:88,targetScore:3000,shape:0,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:4},{type:'piece',pt:0,emoji:'🐟',label:'Sauciii Penguin',count:18},{type:'piece',pt:5,emoji:'🟣',label:'Moody Madness',count:12}],
+         ice:[[1,3,2],[1,4,2],[3,1,2],[3,6,2],[4,1,2],[4,6,2],[6,3,1],[6,4,1]],crates:[]},
+        {moves:30,time:90,targetScore:2500,shape:5,
+         missions:[{type:'piece',pt:1,emoji:'🐧',label:'Cygaar Pengu',count:16}],ice:[],crates:[]},
+        {moves:28,time:100,targetScore:3500,shape:0,
+         missions:[{type:'piece',pt:2,emoji:'🟠',label:'Luca Netz Pudgy',count:16}],
+         ice:[],crates:[]},
+        {moves:30,time:105,targetScore:4000,shape:0,
+         missions:[{type:'piece',pt:1,emoji:'🐧',label:'Cygaar Pengu',count:10}],
+         ice:[],crates:[]},
+        {moves:30,time:120,targetScore:4500,shape:0,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:4},{type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy',count:18}],
+         ice:[[2,3,2],[2,4,2],[3,2,1],[3,5,1],[4,2,1],[4,5,1]],crates:[]},
+        {moves:30,time:120,targetScore:5000,shape:1,
+         missions:[{type:'ice',emoji:'🧊',label:'Ice',count:2},{type:'piece',pt:0,emoji:'🐟',label:'Sauciii Penguin',count:12}],
+         ice:[[3,3,1],[4,4,1]],crates:[]},
+      ];
+      if(lv<=base.length) return normalizeConfig(base[lv-1]);
+
+      // Infinite generation (v5 style) but restricted to pieces+ice only
+      const cycle = base.length;
+      const gen = lv - cycle - 1;
+      const tier = Math.floor(gen / cycle);
+      const slot = gen % cycle;
+
+      const template = normalizeConfig(base[slot]);
+      const isSurv = isSurvivalLevelCheck(lv);
+
+      const scoreMul = 1.5 + tier*1.2 + gen*0.08;
+      const movePenalty = Math.min(10, Math.floor(gen/4) + tier*2);
+      const timePenalty = Math.min(25, Math.floor(gen/3) + tier*3);
+      const countMul = 1 + tier*0.6 + gen*0.04;
+
+      let iceConfig=[];
+      if(!isSurv){
+        const iceCount = Math.min(16, 4 + Math.floor(gen/2) + tier*3);
+        const iceDepth = Math.min(3, 1 + Math.floor(tier/2));
+        const safePositions=[
+          [2,3],[2,4],[3,2],[3,5],[4,2],[4,5],[5,3],[5,4],
+          [3,3],[3,4],[4,3],[4,4],
+          [1,3],[1,4],[3,1],[3,6],[4,1],[4,6],[6,3],[6,4],
+          [1,2],[1,5],[2,1],[2,6],[5,1],[5,6],[6,2],[6,5],
+          [2,2],[2,5],[5,2],[5,5],
+        ];
+        const seed = (gen*7 + slot*13 + tier*5) >>> 0;
+        const icePos = new Set();
+        for(let i=0;i<iceCount;i++){
+          const idx = (seed + i*3) % safePositions.length;
+          const [r,c] = safePositions[idx];
+          const key = r+','+c;
+          if(!icePos.has(key)){
+            icePos.add(key);
+            iceConfig.push([r,c,iceDepth]);
+          }
+        }
+      }
+
+      const shapePool=[0,1,2,0,3,4,0,5,6,1,2,5,0,4,6,3,1,5,2,4,6,0,3,5,7,8,9,10,7,8,9,10];
+      const shape = isSurv ? template.shape : shapePool[(gen + tier*5 + slot*2) % shapePool.length];
+
+      const allMissions=[
+        {type:'piece',pt:0,emoji:'🐟',label:'Sauciii Penguin'},
+        {type:'piece',pt:1,emoji:'🐧',label:'Cygaar Pengu'},
+        {type:'piece',pt:2,emoji:'🟠',label:'Luca Netz Pudgy'},
+        {type:'piece',pt:3,emoji:'🔵',label:'Classic Pudgy'},
+        {type:'piece',pt:4,emoji:'🟢',label:'Ice Pudgy'},
+        {type:'piece',pt:5,emoji:'🟣',label:'Moody Madness'},
+      ].map(m => ({...m, pt: clampPieceType(m.pt)}));
+
+      let missions;
+      if(isSurv){
+        const survPt = clampPieceType((slot + tier) % TYPES);
+        const survCount = Math.min(Math.round((12 + tier*4) * countMul), 30);
+        missions=[{...allMissions[survPt], count: survCount}];
+      } else {
+        const numMissions = Math.min(3, 2 + Math.floor(gen/6));
+        missions=[];
+        // optional ice mission
+        if(iceConfig.length>0 && Math.random()<0.55){
+          missions.push({type:'ice',emoji:'🧊',label:'Ice',count:Math.min(12, Math.max(2, Math.ceil(iceConfig.length*0.6)))});
+        }
+        // fill with piece missions
+        const pickSeed = (gen*11 + tier*17 + slot*3) >>> 0;
+        for(let i=0;i<numMissions;i++){
+          const pt = clampPieceType((pickSeed + i*2) % TYPES);
+          const baseCount = Math.round((10 + tier*4 + gen*0.6) * countMul);
+          missions.push({ ...allMissions[pt], count: Math.min(40, Math.max(6, Math.round(baseCount*0.6))) });
+        }
+        // unique by pt/type
+        const seen = new Set();
+        missions = missions.filter(m => {
+          const k = m.type + ':' + (m.pt ?? '');
+          if(seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        }).slice(0,3);
+      }
+
+      const cfg = {
+        moves: Math.max(12, (template.moves || 30) - movePenalty),
+        time: Math.max(30, (template.time || 90) - timePenalty),
+        targetScore: Math.round((template.targetScore || 1200) * scoreMul),
+        shape,
+        missions,
+        ice: iceConfig,
+        crates: [],
+      };
+      return normalizeConfig(cfg);
+    }
+
+    function initLevel(lv){
+      level = lv;
+      levelConfig = getLevelConfig(level);
+      survivalMode = isSurvivalLevelCheck(level);
+      const survParams = survivalMode ? calcSurvivalParams(level) : null;
+
+      movesLeft = survivalMode ? 999 : levelConfig.moves;
+      timeLeft = Math.ceil(levelConfig.time);
+
+      survivalMaxHP = 100;
+      survivalHP = survivalMaxHP;
+      survivalTimeLeft = survivalMode ? survParams.duration : 0;
+      survivalDrainRate = survivalMode ? survParams.drain : 0;
+      survivalHealPerBlock = survivalMode ? survParams.heal : 0;
+
+      score = 0;
+
+      // Missions
+      missionProgress = survivalMode ? [] : (levelConfig.missions || []).map(m => ({
+          m,
+          current: 0,
+          done: false,
+        }));
+
+      // Board + ice
+      board = Array.from({length:ROWS}, () => Array(COLS).fill(null));
+      iceHp = Array.from({length:ROWS}, () => Array(COLS).fill(0));
+      pwGrid = Array.from({length:ROWS}, () => Array(COLS).fill(null));
+      blocked = Array.from({length:ROWS}, () => Array(COLS).fill(false));
+      fallDy = Array.from({length:ROWS}, () => Array(COLS).fill(0));
+      popScale = Array.from({length:ROWS}, () => Array(COLS).fill(1));
+
+      const shape = Number(levelConfig.shape || 0);
+      for(const [r,c] of getShapeBlockedCells(shape)){
+        if(r>=0&&r<ROWS&&c>=0&&c<COLS) blocked[r][c] = true;
+      }
+      if(levelConfig.ice){
+        for(const it of levelConfig.ice){
+          const r = it[0], c = it[1], hp = it[2]||1;
+          if(r>=0&&r<ROWS&&c>=0&&c<COLS && !isBlocked(r,c)) iceHp[r][c] = Math.max(1, Math.min(3, hp));
+        }
+      }
+
+      // Remove any initial matches (simple retry per cell)
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          if(isBlocked(r,c)){
+            board[r][c] = null;
+            iceHp[r][c] = 0;
+            pwGrid[r][c] = null;
+            fallDy[r][c] = 0;
+            popScale[r][c] = 1;
+            continue;
+          }
+          if(board[r][c]==null) board[r][c] = randType();
+          let guard = 0;
+          while(hasMatchAt(r,c) && guard++ < 10){
+            board[r][c] = randType();
+          }
+        }
+      }
+      sel = null;
+      animating = false;
+      gameActive = false;
+      stopTimer();
+      updHUD();
+      updMissionsText();
+      draw();
+    }
+
+    function startGame(){
+      if(gameActive) return;
+      gameActive = true;
+      startTimer();
+    }
+
+    function stopTimer(){
+      if(timerId){ clearInterval(timerId); timerId = null; }
+    }
+
+    function startTimer(){
+      stopTimer();
+      const intervalMs = survivalMode ? 500 : 1000;
+      timerId = setInterval(() => {
+        if(!gameActive) return;
+        if(survivalMode){
+          survivalHP = Math.max(0, survivalHP - survivalDrainRate);
+          survivalTimeLeft = Math.max(0, survivalTimeLeft - 0.5);
+          if(survivalHP<=0){
+            gameActive = false;
+            stopTimer();
+          }
+          if(survivalTimeLeft<=0){
+            // Win survival if you last until the timer hits 0 and still have HP
+            if(survivalHP>0){
+              gameActive = false;
+              stopTimer();
+              setTimeout(() => {
+                initLevel(level+1);
+                startGame();
+              }, 350);
+            }
+          }
+        } else {
+          timeLeft = Math.max(0, timeLeft - 1);
+          if(timeLeft<=0){
+            gameActive = false;
+            stopTimer();
+          }
+        }
+        updHUD();
+      }, intervalMs);
+    }
+
+    function hasMatchAt(r,c){
+      if(isBlocked(r,c)) return false;
+      const t = board[r][c];
+      if(t==null) return false;
+      // horizontal
+      let run=1;
+      for(let cc=c-1;cc>=0 && !isBlocked(r,cc) && board[r][cc]===t;cc--) run++;
+      for(let cc=c+1;cc<COLS && !isBlocked(r,cc) && board[r][cc]===t;cc++) run++;
+      if(run>=3) return true;
+      // vertical
+      run=1;
+      for(let rr=r-1;rr>=0 && !isBlocked(rr,c) && board[rr][c]===t;rr--) run++;
+      for(let rr=r+1;rr<ROWS && !isBlocked(rr,c) && board[rr][c]===t;rr++) run++;
+      return run>=3;
+    }
+
+    function findMatchGroups(){
+      const groups = [];
+      // Horizontal
+      for(let r=0;r<ROWS;r++){
+        let c=0;
+        while(c<COLS){
+          if(isBlocked(r,c)) { c++; continue; }
+          const t = board[r][c];
+          if(t==null){ c++; continue; }
+          let run=1;
+          while(c+run<COLS && !isBlocked(r,c+run) && board[r][c+run]===t) run++;
+          if(run>=3){
+            const g=[];
+            for(let k=0;k<run;k++) g.push({r, c:c+k, t});
+            groups.push(g);
+          }
+          c += run;
+        }
+      }
+      // Vertical
+      for(let c=0;c<COLS;c++){
+        let r=0;
+        while(r<ROWS){
+          if(isBlocked(r,c)) { r++; continue; }
+          const t = board[r][c];
+          if(t==null){ r++; continue; }
+          let run=1;
+          while(r+run<ROWS && !isBlocked(r+run,c) && board[r+run][c]===t) run++;
+          if(run>=3){
+            const g=[];
+            for(let k=0;k<run;k++) g.push({r:r+k, c, t});
+            groups.push(g);
+          }
+          r += run;
+        }
+      }
+      return groups;
+    }
+
+    function toClearFromGroups(groups){
+      const s = new Set();
+      for(const g of groups){
+        for(const p of g){ s.add(p.r+','+p.c); }
+      }
+      return s;
+    }
+
+    function addMissionProgressForPiece(pt, count){
+      if(survivalMode) return;
+      for(const mp of missionProgress){
+        if(mp.done) continue;
+        const m = mp.m;
+        if(m.type==='piece' && Number(m.pt)===Number(pt)){
+          mp.current += count;
+          if(mp.current >= Number(m.count||0)) mp.done = true;
+        }
+      }
+    }
+
+    function addMissionProgressForIce(count){
+      if(survivalMode) return;
+      for(const mp of missionProgress){
+        if(mp.done) continue;
+        const m = mp.m;
+        if(m.type==='ice'){
+          mp.current += count;
+          if(mp.current >= Number(m.count||0)) mp.done = true;
+        }
+      }
+    }
+
+    function allMissionsDone(){
+      if(survivalMode) return false;
+      return missionProgress.length>0 && missionProgress.every(mp => mp.done);
+    }
+
+    function updMissionsText(){
+      const el = document.getElementById('missionLine');
+      if(!el) return;
+      if(!levelConfig){ el.textContent = 'Loading…'; return; }
+      if(survivalMode){
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
+      const parts = [];
+      if(Number.isFinite(Number(levelConfig.targetScore)) && Number(levelConfig.targetScore)>0){
+        parts.push(`🎯 ${score}/${levelConfig.targetScore}`);
+      }
+      for(const mp of missionProgress){
+        const m = mp.m;
+        const lab = m.emoji ? `${m.emoji} ${m.label||m.type}` : `${m.icon||''} ${m.label||m.type}`;
+        parts.push(`${lab}: ${Math.min(mp.current, Number(m.count||0))}/${Number(m.count||0)}`);
+      }
+      el.textContent = parts.join('  |  ');
+    }
+
+    function collapse(){
+      for(let c=0;c<COLS;c++){
+        // Only non-blocked cells collapse; blocked cells are holes.
+        const cells=[];
+        for(let r=ROWS-1;r>=0;r--){
+          if(isBlocked(r,c)) continue;
+          cells.push(r);
+        }
+        let idx = 0;
+        // Pull down existing pieces
+        for(const r of cells){
+          const v = board[r][c];
+          if(v!=null){
+            const wr = cells[idx++];
+            board[wr][c] = v;
+            pwGrid[wr][c] = pwGrid[r][c];
+            // animation: moved piece starts above its target
+            if(wr!==r){
+              const drop = (wr - r);
+              // cap so we never hide the whole board
+              const start = -Math.min(2.4, Math.max(0.8, drop * 0.55));
+              fallDy[wr][c] = Math.min(fallDy[wr][c] || 0, start);
+              popScale[wr][c] = 1;
+            }
+            if(wr!==r){
+              board[r][c] = null;
+              pwGrid[r][c] = null;
+              fallDy[r][c] = 0;
+              popScale[r][c] = 1;
+            }
+          }
+        }
+        // Fill remaining
+        let spawnK = 0;
+        for(; idx<cells.length; idx++){
+          const rr = cells[idx];
+          board[rr][c] = randType();
+          pwGrid[rr][c] = null;
+          spawnK++;
+          // spawn slightly above, staggered, but capped
+          const start = -Math.min(3.0, 1.6 + spawnK*0.15);
+          fallDy[rr][c] = Math.min(fallDy[rr][c] || 0, start);
+          popScale[rr][c] = 0.9;
+        }
+      }
+    }
+
+    function areAdj(a,b){
+      return (Math.abs(a.r-b.r)+Math.abs(a.c-b.c))===1;
+    }
+
+    function swap(a,b){
+      const tmp = board[a.r][a.c];
+      board[a.r][a.c] = board[b.r][b.c];
+      board[b.r][b.c] = tmp;
+
+      const pwt = pwGrid[a.r][a.c];
+      pwGrid[a.r][a.c] = pwGrid[b.r][b.c];
+      pwGrid[b.r][b.c] = pwt;
+    }
+
+    function choosePowerupCreate(groups, toClear){
+      let pwCreate = null;
+      let pwPos = null;
+
+      for(const g of groups){
+        const l = g.length;
+        if(l>=5 && !pwCreate){
+          pwCreate = 'zap';
+          pwPos = g[Math.floor(l/2)];
+        } else if(l===4 && !pwCreate){
+          pwCreate = 'bomb';
+          pwPos = g[1];
+        }
+      }
+
+      // Blizzard: intersection (3+ in row and 3+ in col within the clear set)
+      if(!pwCreate){
+        const pts = [...toClear].map(k=>{const [r,c]=k.split(',').map(Number);return {r,c};});
+        for(const p of pts){
+          const rowCt = pts.filter(q=>q.r===p.r).length;
+          const colCt = pts.filter(q=>q.c===p.c).length;
+          if(rowCt>=3 && colCt>=3){
+            pwCreate = 'bliz';
+            pwPos = p;
+            break;
+          }
+        }
+      }
+
+      // Mega: multiple groups cleared at once
+      if(!pwCreate && groups.length>=3){
+        const g = groups[1] || groups[0];
+        pwCreate = 'mega';
+        pwPos = g ? g[0] : null;
+      }
+
+      if(!pwCreate || !pwPos) return null;
+      const pt = board[pwPos.r]?.[pwPos.c];
+      if(pt==null) return null;
+      return { pwCreate, pwPos: {r: pwPos.r, c: pwPos.c}, pwType: pt };
+    }
+
+    function applyPowerupAt(r,c,toClear){
+      const pw = pwGrid[r]?.[c];
+      if(!pw) return;
+      pwGrid[r][c] = null;
+      if(pw==='bomb'){
+        for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+          const nr=r+dr,nc=c+dc;
+          if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+          if(isBlocked(nr,nc)) continue;
+          toClear.add(nr+','+nc);
+        }
+      } else if(pw==='zap'){
+        for(let k=0;k<COLS;k++) if(!isBlocked(r,k)) toClear.add(r+','+k);
+        for(let k=0;k<ROWS;k++) if(!isBlocked(k,c)) toClear.add(k+','+c);
+      } else if(pw==='bliz'){
+        const t = board[r]?.[c];
+        if(t!=null){
+          for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<COLS;cc++){
+            if(isBlocked(rr,cc)) continue;
+            if(board[rr][cc]===t) toClear.add(rr+','+cc);
+          }
+        }
+      } else if(pw==='mega'){
+        for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){
+          const nr=r+dr,nc=c+dc;
+          if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+          if(isBlocked(nr,nc)) continue;
+          toClear.add(nr+','+nc);
+        }
+      }
+    }
+
+    function resolveOnce(){
+      const groups = findMatchGroups();
+      const m0 = toClearFromGroups(groups);
+      if(m0.size===0) return false;
+
+      // Decide power-up creation based on the initial match
+      const pwNew = choosePowerupCreate(groups, m0);
+
+      // Expand clear by triggering powerups caught in the blast
+      const toClear = new Set(m0);
+      for(let iter=0; iter<4; iter++){
+        let changed = false;
+        const keys = [...toClear];
+        for(const key of keys){
+          const [r,c] = key.split(',').map(Number);
+          if(isBlocked(r,c)) continue;
+          const before = toClear.size;
+          applyPowerupAt(r,c,toClear);
+          if(toClear.size !== before) changed = true;
+        }
+        if(!changed) break;
+      }
+
+      // scoring: simple
+      score += toClear.size * 10;
+
+      // FX: subtle sparkle/flash for cleared cells (cheap)
+      {
+        const now = performance.now();
+        for(const key of toClear){
+          const [r,c] = key.split(',').map(Number);
+          if(isBlocked(r,c)) continue;
+          sparks.push({ r, c, t0: now, life: 220 + (Math.random()*140) });
+        }
+        animating = true;
+      }
+
+      // Track destroyed pieces
+      const destroyedCountByType = new Map();
+      for(const key of toClear){
+        const [r,c] = key.split(',').map(Number);
+        if(isBlocked(r,c)) continue;
+        const t = board[r][c];
+        if(t!=null) destroyedCountByType.set(t, (destroyedCountByType.get(t)||0)+1);
+        board[r][c] = null;
+        pwGrid[r][c] = null;
+        fallDy[r][c] = 0;
+        popScale[r][c] = 1;
+      }
+
+      // Survival heal
+      if(survivalMode){
+        const heal = toClear.size * survivalHealPerBlock;
+        survivalHP = Math.min(survivalMaxHP, survivalHP + heal);
+      }
+
+      // Missions: pieces
+      for(const [pt, cnt] of destroyedCountByType.entries()){
+        addMissionProgressForPiece(pt, cnt);
+      }
+
+      // Damage ice adjacent to cleared cells
+      let iceDestroyed = 0;
+      for(const key of toClear){
+        const [r,c] = key.split(',').map(Number);
+        const adj = [[r,c],[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+        for(const [rr,cc] of adj){
+          if(rr<0||rr>=ROWS||cc<0||cc>=COLS) continue;
+          if(isBlocked(rr,cc)) continue;
+          if(iceHp[rr][cc]>0){
+            iceHp[rr][cc]--;
+            if(iceHp[rr][cc]===0) iceDestroyed++;
+          }
+        }
+      }
+      if(iceDestroyed>0) addMissionProgressForIce(iceDestroyed);
+
+      collapse();
+
+      // ensure we animate after collapse
+      animating = true;
+
+      // Place newly created powerup (after collapse so it stays visible at its spot if still exists)
+      if(pwNew && !survivalMode){
+        const { pwCreate, pwPos } = pwNew;
+        if(pwPos.r>=0&&pwPos.r<ROWS&&pwPos.c>=0&&pwPos.c<COLS && !isBlocked(pwPos.r,pwPos.c)){
+          // If cell got cleared, recreate the base piece so the powerup exists
+          if(board[pwPos.r][pwPos.c]==null) board[pwPos.r][pwPos.c] = randType();
+          pwGrid[pwPos.r][pwPos.c] = pwCreate;
+        }
+      }
+
+      return true;
+    }
+
+    function resolveAll(){
+      // keep it bounded per user input to avoid long frame stalls
+      let steps = 0;
+      while(steps < 6 && resolveOnce()) steps++;
+      updHUD();
+      updMissionsText();
+
+      const targetOk = !survivalMode && Number(levelConfig?.targetScore||0) > 0 ? (score >= Number(levelConfig.targetScore||0)) : true;
+      if(gameActive && !survivalMode && allMissionsDone() && targetOk){
+        // simple: auto-advance
+        gameActive = false;
+        stopTimer();
+        setTimeout(() => {
+          initLevel(level+1);
+          startGame();
+        }, 350);
+      }
+    }
+
+    function updHUD(){
+      document.getElementById('score').textContent = String(score);
+      document.getElementById('moves').textContent = String(movesLeft);
+      document.getElementById('time').textContent = String(survivalMode ? Math.ceil(survivalTimeLeft) : timeLeft);
+      document.getElementById('lvl').textContent = String(level);
+
+      const hpChip = document.getElementById('hpChip');
+      const hpEl = document.getElementById('hp');
+      const hpBarWrap = document.getElementById('hpBarWrap');
+      const hpBarFill = document.getElementById('hpBarFill');
+      if(survivalMode){
+        if(hpChip) hpChip.style.display = '';
+        if(hpEl) hpEl.textContent = String(Math.round((survivalHP/survivalMaxHP)*100)) + '%';
+        if(hpBarWrap) hpBarWrap.style.display = '';
+        if(hpBarFill){
+          const pct = Math.max(0, Math.min(1, survivalHP/survivalMaxHP));
+          hpBarFill.style.width = (pct*100).toFixed(1) + '%';
+        }
+      } else {
+        if(hpChip) hpChip.style.display = 'none';
+        if(hpBarWrap) hpBarWrap.style.display = 'none';
+      }
+    }
+
+    function draw(){
+      const w = cv.width, h = cv.height;
+      ctx.clearRect(0,0,w,h);
+      const cell = Math.floor(Math.min(w/COLS, h/ROWS));
+      lastCellPx = cell;
+      const pad = 5;
+
+      // background grid
+      ctx.fillStyle = 'rgba(255,255,255,.04)';
+      ctx.fillRect(0,0,w,h);
+
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const x = c*cell;
+          const y = r*cell;
+          // cell bg
+          if(isBlocked(r,c)){
+            ctx.fillStyle = 'rgba(0,0,0,.12)';
+            ctx.fillRect(x+1,y+1,cell-2,cell-2);
+            continue;
+          }
+          ctx.fillStyle = 'rgba(0,0,0,.22)';
+          ctx.fillRect(x+1,y+1,cell-2,cell-2);
+
+          const t = board[r][c];
+          if(t==null) continue;
+
+          const px = x + pad;
+          const dy = (fallDy[r]?.[c] || 0) * cell;
+          const py = y + pad + dy;
+          const ps = cell - pad*2;
+
+          const sc = popScale[r]?.[c] || 1;
+          const ps2 = ps * sc;
+          const px2 = px + (ps-ps2)*0.5;
+          const py2 = py + (ps-ps2)*0.5;
+
+          // Ice underlay
+          if(iceHp[r][c] > 0){
+            ctx.fillStyle = 'rgba(200,240,255,.25)';
+            roundRect(ctx, px2, py2, ps2, ps2, 10);
+            ctx.fill();
+          }
+
+          // piece sprite (identical to v5)
+          const img = sprite.imgs.get(t);
+          if(img && img.naturalWidth>0){
+            // cover-like draw with optional % scaling and position
+            const meta = sprite.meta.get(t) || { posX:0.5, posY:0.5, scale:1 };
+            const scale = meta.scale || 1;
+
+            const dw = ps2;
+            const dh = ps2;
+            const tw = img.naturalWidth;
+            const th = img.naturalHeight;
+
+            // start from cover
+            const cover = Math.max(dw/tw, dh/th);
+            const s = cover * scale;
+            const sw = dw / s;
+            const sh = dh / s;
+            const sx = (tw - sw) * (meta.posX ?? 0.5);
+            const sy = (th - sh) * (meta.posY ?? 0.5);
+
+            ctx.save();
+            roundRect(ctx, px2, py2, ps2, ps2, 10);
+            ctx.clip();
+            ctx.drawImage(img, sx, sy, sw, sh, px2, py2, dw, dh);
+
+            // subtle highlight like v5 (cheap)
+            ctx.fillStyle = 'rgba(255,255,255,.08)';
+            ctx.beginPath();
+            ctx.ellipse(px2 + ps2*0.35, py2 + ps2*0.28, ps2*0.22, ps2*0.18, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore();
+          } else {
+            // fallback
+            ctx.fillStyle = '#888';
+            roundRect(ctx, px2, py2, ps2, ps2, 10);
+            ctx.fill();
+          }
+
+          // Ice crack indicator (cheap)
+          if(iceHp[r][c] === 2){
+            ctx.strokeStyle = 'rgba(255,255,255,.25)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px2+ps2*0.2, py2+ps2*0.3);
+            ctx.lineTo(px2+ps2*0.7, py2+ps2*0.65);
+            ctx.stroke();
+          } else if(iceHp[r][c] === 1){
+            ctx.strokeStyle = 'rgba(255,255,255,.38)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(px2+ps2*0.15, py2+ps2*0.25);
+            ctx.lineTo(px2+ps2*0.8, py2+ps2*0.7);
+            ctx.stroke();
+          }
+
+          // selection outline
+          if(sel && sel.r===r && sel.c===c){
+            ctx.strokeStyle = 'rgba(255,209,102,.9)';
+            ctx.lineWidth = 4;
+            roundRect(ctx, px2-2, py2-2, ps2+4, ps2+4, 12);
+            ctx.stroke();
+          }
+
+          // powerup mark
+          const pw = pwGrid[r][c];
+          if(pw){
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,.35)';
+            ctx.beginPath();
+            ctx.arc(px2+ps2-10, py2+10, 9, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = `${Math.max(12, Math.floor(ps*0.32))}px system-ui`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const icon = pw==='bomb'?'💣':pw==='zap'?'⚡':pw==='bliz'?'🌨️':'⭐';
+            ctx.fillText(icon, px2+ps2-10, py2+10);
+            ctx.restore();
+          }
+        }
+      }
+
+      // FX overlay: sparks
+      if(sparks.length>0){
+        const now = performance.now();
+        ctx.save();
+        for(const s of sparks){
+          const age = now - s.t0;
+          const p = Math.max(0, Math.min(1, age / s.life));
+          const a = (1 - p);
+          if(a<=0) continue;
+          const cx = (s.c + 0.5) * cell;
+          const cy = (s.r + 0.5) * cell;
+          const rad = cell * (0.10 + 0.18*p);
+          ctx.globalAlpha = 0.22 * a;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI*2);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.28 * a;
+          ctx.strokeStyle = 'rgba(255,209,102,.85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad*1.25, 0, Math.PI*2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    function roundRect(ctx, x, y, w, h, r){
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y);
+      ctx.arcTo(x+w,y,x+w,y+h,rr);
+      ctx.arcTo(x+w,y+h,x,y+h,rr);
+      ctx.arcTo(x,y+h,x,y,rr);
+      ctx.arcTo(x,y,x+w,y,rr);
+      ctx.closePath();
+    }
+
+    function getCellFromEvent(ev){
+      const rect = cv.getBoundingClientRect();
+      const clientX = (ev.touches && ev.touches[0]) ? ev.touches[0].clientX : ev.clientX;
+      const clientY = (ev.touches && ev.touches[0]) ? ev.touches[0].clientY : ev.clientY;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      if(x<0||y<0||x>rect.width||y>rect.height) return null;
+      const cellW = rect.width / COLS;
+      const cellH = rect.height / ROWS;
+      const c = Math.floor(x / cellW);
+      const r = Math.floor(y / cellH);
+      if(r<0||r>=ROWS||c<0||c>=COLS) return null;
+      if(isBlocked(r,c)) return null;
+      return { r, c };
+    }
+
+    function onPick(cell){
+      if(!cell || animating) return;
+      if(!gameActive) startGame();
+      if(!sel){
+        sel = cell;
+        draw();
+        return;
+      }
+      if(sel.r===cell.r && sel.c===cell.c){
+        sel = null;
+        draw();
+        return;
+      }
+      if(!areAdj(sel, cell)){
+        sel = cell;
+        draw();
+        return;
+      }
+
+      if(!survivalMode && movesLeft<=0) return;
+
+      // Attempt swap; revert if no match
+      const a = sel;
+      const b = cell;
+      sel = null;
+      swap(a,b);
+      const g = findMatchGroups();
+      const m = toClearFromGroups(g);
+      if(m.size===0){
+        swap(a,b);
+        draw();
+        return;
+      }
+
+      playSwapSound();
+
+      if(!survivalMode) movesLeft = Math.max(0, movesLeft-1);
+      resolveAll();
+      draw();
+    }
+
+    // Input: pointerdown (works for mouse + touch)
+    cv.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const cell = getCellFromEvent(ev);
+      onPick(cell);
+    }, { passive:false });
+
+    // Prevent page scroll / rubber band while playing
+    document.addEventListener('touchmove', (ev) => {
+      ev.preventDefault();
+    }, { passive:false });
+
+    // RAF loop for future animations (currently only redraw throttle)
+    function tick(t){
+      if(!lastT) lastT = t;
+      const dt = t - lastT;
+      if(dt >= FRAME_MS){
+        lastT = t;
+        const hasSparks = sparks.length>0;
+        if(animating || hasSparks){
+          let any = false;
+          for(let r=0;r<ROWS;r++){
+            for(let c=0;c<COLS;c++){
+              if(isBlocked(r,c)) continue;
+              let dy = fallDy[r][c] || 0;
+              let sc = popScale[r][c] || 1;
+
+              if(Math.abs(dy) > 0.02){
+                dy *= 0.62;
+                if(Math.abs(dy) <= 0.06){
+                  dy = 0;
+                  sc = Math.max(sc, 1.03);
+                }
+                fallDy[r][c] = dy;
+                any = true;
+              }
+
+              if(Math.abs(sc - 1) > 0.01){
+                sc = sc + (1 - sc) * 0.22;
+                popScale[r][c] = sc;
+                any = true;
+              }
+            }
+          }
+
+          if(sparks.length>0){
+            const now = performance.now();
+            sparks = sparks.filter(s => (now - s.t0) < s.life);
+            if(sparks.length>0) any = true;
+          }
+
+          if(!any){
+            animating = false;
+          }
+          draw();
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.getElementById('btnReset').addEventListener('click', () => initLevel(level));
+    document.getElementById('btnStart').addEventListener('click', startGame);
+
+    // Boot
+    (async () => {
+      try {
+        await loadSpritesFromV5();
+      } catch (e) {
+        // ignore sprite errors; fallback renderer will be used
+      }
+      initLevel(1);
+      updMissionsText();
+      draw();
+    })();
+  </script>
+</body>
+</html>

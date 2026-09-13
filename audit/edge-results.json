@@ -1,0 +1,15 @@
+{
+  "timeout": {
+    "calls": 10,
+    "lifePoints": 1000
+  },
+  "afterQuit": {
+    "gameActive": false,
+    "score": 36,
+    "levelCompleteVisible": false
+  },
+  "touchAfterSingleTap": {
+    "sel": null,
+    "selectedCells": 0
+  }
+}
